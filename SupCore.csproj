@@ -4,6 +4,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>SupCore</AssemblyName>
@@ -11,12 +12,39 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Platforms>AnyCPU</Platforms>
+    <!-- Suppress auto-generation of assembly attributes; Properties/AssemblyInfo.cs provides them -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- Suppress nullable warnings for the legacy SUP source files -->
+    <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
   </PropertyGroup>
 
+  <!-- Exclude legacy/scratch files that are not part of the compiled application -->
   <ItemGroup>
+    <Compile Remove="Main.cs" />
+    <Compile Remove="Main.designer.cs" />
+    <Compile Remove="Main.resx" />
+    <Compile Remove="patch_unsupported.cs" />
+    <Compile Remove="patch_syntax.cs" />
+    <Compile Remove="test4.cs" />
+    <Compile Remove="syntax_check.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Core wallet / blockchain packages (SupCore.Wallet) -->
     <PackageReference Include="NBitcoin" Version="7.0.41" />
     <PackageReference Include="NBitcoin.Altcoins" Version="2.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+
+    <!-- Original SUP dependencies -->
+    <PackageReference Include="AngleSharp" Version="1.4.0" />
+    <PackageReference Include="AngleSharp.Css" Version="0.17.0" />
+    <PackageReference Include="CommandLineParser" Version="2.9.1" />
+    <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
+    <PackageReference Include="NAudio" Version="2.3.0" />
+    <PackageReference Include="NReco.VideoConverter" Version="1.2.1" />
+    <PackageReference Include="QrCode.Net" Version="0.4.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3351.48" />
   </ItemGroup>
 
 </Project>
