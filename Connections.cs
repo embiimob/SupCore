@@ -106,13 +106,6 @@ namespace SUP
                 LblHeight  = lblHeightMZC,  ChkReindex = chkReindexMZC,  ChkRescan = chkRescanMZC
             };
 
-            // Subscribe to status-change events for each node
-            foreach (var cfg in CoinNetworkConfig.All)
-            {
-                var node = NodeHostManager.GetNode(cfg.Id);
-                node.StatusChanged += (s2, e2) => UpdateRowFromNode(cfg.Id);
-            }
-
             // Check IPFS daemon status
             Task.Run(CheckIpfsStatus);
 
@@ -126,66 +119,107 @@ namespace SUP
         {
             var btn = (Button)sender;
             var id = (CoinNetworkId)btn.Tag;
-            var node = NodeHostManager.GetNode(id);
-            var row = _rows[id];
+            var wallet = NodeHostManager.GetWallet(id);
 
-            if (node.IsRunning)
+            if (wallet.IsOpen)
             {
-                btn.Text = "Start";
-                btn.BackColor = SystemColors.Control;
-                btn.ForeColor = SystemColors.ControlText;
-                Task.Run(() => node.Stop());
+                wallet.Lock();
             }
             else
             {
-                btn.Text = "Stop";
-                btn.BackColor = Color.Blue;
-                btn.ForeColor = Color.Yellow;
-                node.Start(
-                    reindex: row.ChkReindex.Checked,
-                    rescan:  row.ChkRescan.Checked);
+                OpenWalletWithPrompt(wallet);
+            }
+            UpdateRowFromWallet(id);
+        }
+
+        private static void OpenWalletWithPrompt(WalletManager wallet)
+        {
+            // Try with no password first (new wallets and unencrypted wallets)
+            try
+            {
+                wallet.Open("");
+                return;
+            }
+            catch (InvalidOperationException)
+            {
+                // Wallet file exists and is encrypted — fall through to password prompt
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Wallet Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            string pass = PromptWalletPassword("Enter wallet password:");
+            try
+            {
+                wallet.Open(pass);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Wallet Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
-        private void UpdateRowFromNode(CoinNetworkId id)
+        private void UpdateRowFromWallet(CoinNetworkId id)
         {
             if (!_rows.TryGetValue(id, out var row)) return;
-            var node = NodeHostManager.GetNode(id);
+            var wallet = NodeHostManager.GetWallet(id);
             if (InvokeRequired)
             {
-                Invoke(new Action(() => ApplyRowState(row, node)));
+                Invoke(new Action(() => ApplyWalletRowState(row, wallet)));
             }
             else
             {
-                ApplyRowState(row, node);
+                ApplyWalletRowState(row, wallet);
             }
         }
 
-        private static void ApplyRowState(CoinStatusRow row, NodeHost node)
+        private static void ApplyWalletRowState(CoinStatusRow row, WalletManager wallet)
         {
-            if (node.IsRunning)
+            if (wallet.IsOpen)
             {
                 row.BtnToggle.Text      = "Stop";
                 row.BtnToggle.BackColor = Color.Blue;
                 row.BtnToggle.ForeColor = Color.Yellow;
+                int addrCount = wallet.GetAddresses().Count;
+                row.LblStatus.Text = "Open";
+                row.Progress.Value = 100;
+                row.LblHeight.Text = addrCount + " addr";
             }
             else
             {
                 row.BtnToggle.Text      = "Start";
                 row.BtnToggle.BackColor = SystemColors.Control;
                 row.BtnToggle.ForeColor = SystemColors.ControlText;
+                row.LblStatus.Text      = "Stopped";
+                row.Progress.Value      = 0;
+                row.LblHeight.Text      = "";
             }
-            row.LblStatus.Text  = node.StatusText;
-            int pct = (int)Math.Min(100, Math.Max(0, node.SyncPercent));
-            row.Progress.Value  = pct;
-            row.LblHeight.Text  = node.ChainHeaders > 0
-                ? $"{node.SyncedBlocks}/{node.ChainHeaders}"
-                : "";
         }
 
         private void RefreshAllStatus()
         {
-            NodeHostManager.RefreshAll();
+            foreach (var cfg in CoinNetworkConfig.All)
+                UpdateRowFromWallet(cfg.Id);
+        }
+
+        private static string PromptWalletPassword(string prompt)
+        {
+            var dlg = new Form
+            {
+                Text = "Wallet Password", Width = 360, Height = 130,
+                StartPosition = FormStartPosition.CenterParent,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false, MinimizeBox = false
+            };
+            var lbl = new Label { Text = prompt, Location = new System.Drawing.Point(10, 12), AutoSize = true };
+            var tb  = new TextBox { Location = new System.Drawing.Point(10, 32), Width = 320, UseSystemPasswordChar = true };
+            var btn = new Button { Text = "OK", DialogResult = DialogResult.OK, Location = new System.Drawing.Point(10, 64), Width = 70 };
+            dlg.Controls.AddRange(new System.Windows.Forms.Control[] { lbl, tb, btn });
+            dlg.AcceptButton = btn;
+            dlg.ShowDialog();
+            return tb.Text;
         }
 
         // ── RPC server checkbox ────────────────────────────────────────────

@@ -50,11 +50,6 @@ namespace SUP
 
         private void RefreshStatus()
         {
-            foreach (var cfg in CoinNetworkConfig.All)
-            {
-                var node = NodeHostManager.GetNode(cfg.Id);
-                node.RefreshStatus();
-            }
             if (InvokeRequired) { Invoke(new Action(UpdateStatusTab)); return; }
             UpdateStatusTab();
         }
@@ -64,8 +59,10 @@ namespace SUP
             var sb = new System.Text.StringBuilder();
             foreach (var cfg in CoinNetworkConfig.All)
             {
-                var node = NodeHostManager.GetNode(cfg.Id);
-                sb.AppendLine($"{cfg.DisplayName,-22} {node.StatusText,-22} {node.SyncedBlocks}/{node.ChainHeaders}  {node.SyncPercent:F1}%");
+                var wallet = NodeHostManager.GetWallet(cfg.Id);
+                string status = wallet.IsOpen ? "Open" : "Stopped";
+                int addrCount = wallet.IsOpen ? wallet.GetAddresses().Count : 0;
+                sb.AppendLine($"{cfg.DisplayName,-22} {status,-22} {addrCount} addr");
             }
             txtSyncStatus.Text = sb.ToString();
         }
