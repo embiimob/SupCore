@@ -163,6 +163,15 @@ namespace SupCore.Forms
                 await RefreshStatusAsync(coin);
         }
 
+        private void UpdateRefreshInterval()
+        {
+            bool anyCoinActivelySyncing = _onlineCoins.Any(coin =>
+                _statusLabels.TryGetValue(coin, out var lbl)
+                && lbl.Text.StartsWith("Local node syncing", StringComparison.OrdinalIgnoreCase));
+
+            _refreshTimer.Interval = anyCoinActivelySyncing ? 10_000 : 30_000;
+        }
+
         private async Task RefreshWalletSummaryAsync(CoinType coin)
         {
             string summary;
@@ -222,6 +231,8 @@ namespace SupCore.Forms
                     btn.BackColor = System.Drawing.Color.MistyRose;
                 }
             }
+
+            UpdateRefreshInterval();
         }
 
         private void UpdateWalletSummaryUI(CoinType coin, string summary)
