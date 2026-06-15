@@ -20,6 +20,13 @@ namespace SUP
             new Dictionary<CoinNetworkId, CoinStatusRow>();
         private readonly Dictionary<CoinNetworkId, int> _rowTops =
             new Dictionary<CoinNetworkId, int>();
+        private const int ChainColumnX = 6;
+        private const int ChainColumnWidth = 60;
+        private const int StatusColumnX = 70;
+        private const int ProgressColumnX = 190;
+        private const int HeightColumnX = 338;
+        private const int ReindexColumnX = 540;
+        private const int RescanColumnX = 590;
 
         private struct CoinStatusRow
         {
@@ -555,33 +562,33 @@ namespace SUP
 
             lblChain.Text     = chainLabel;
             lblChain.AutoSize = true;
-            lblChain.Location = new System.Drawing.Point(6, y + 4);
+            lblChain.Location = new System.Drawing.Point(ChainColumnX, y + 4);
 
             lblStatus.AutoSize = false;
-            lblStatus.Location = new System.Drawing.Point(70, y + 4);
+            lblStatus.Location = new System.Drawing.Point(StatusColumnX, y + 4);
             lblStatus.Size     = new System.Drawing.Size(110, 13);
             lblStatus.Text     = "Stopped";
 
-            prg.Location = new System.Drawing.Point(190, y);
+            prg.Location = new System.Drawing.Point(ProgressColumnX, y);
             prg.Size     = new System.Drawing.Size(140, 18);
             prg.Minimum  = 0;
             prg.Maximum  = 100;
             prg.Value    = 0;
 
             lblHeight.AutoSize = false;
-            lblHeight.Location = new System.Drawing.Point(338, y + 4);
+            lblHeight.Location = new System.Drawing.Point(HeightColumnX, y + 4);
             lblHeight.Size     = new System.Drawing.Size(200, 13);
             lblHeight.Text     = "";
 
             chkRe.Text     = "";
             chkRe.AutoSize = false;
             chkRe.Size     = new System.Drawing.Size(15, 15);
-            chkRe.Location = new System.Drawing.Point(545, y + 2);
+            chkRe.Location = new System.Drawing.Point(ReindexColumnX + 5, y + 2);
 
             chkRs.Text     = "";
             chkRs.AutoSize = false;
             chkRs.Size     = new System.Drawing.Size(15, 15);
-            chkRs.Location = new System.Drawing.Point(596, y + 2);
+            chkRs.Location = new System.Drawing.Point(RescanColumnX + 6, y + 2);
 
             btnToggle.Text     = "Start";
             btnToggle.Tag      = id;
@@ -617,15 +624,15 @@ namespace SUP
             int buttonX = Math.Max(0, grpWalletNodes.ClientSize.Width - buttonRightMargin - buttonWidth);
             int rescanColumnX = buttonX - 56;
             int reindexColumnX = rescanColumnX - 56;
-            int heightColumnX = 338;
+            int heightColumnX = HeightColumnX;
             int heightColumnWidth = Math.Max(120, reindexColumnX - heightColumnX - 10);
-            int progressColumnX = 190;
+            int progressColumnX = ProgressColumnX;
             int progressColumnWidth = Math.Max(90, heightColumnX - progressColumnX - 8);
-            int statusColumnX = 70;
+            int statusColumnX = StatusColumnX;
             int statusColumnWidth = Math.Max(80, progressColumnX - statusColumnX - 10);
 
-            lblColChain.Location = new Point(6, 20);
-            lblColChain.Size = new Size(60, 13);
+            lblColChain.Location = new Point(ChainColumnX, 20);
+            lblColChain.Size = new Size(ChainColumnWidth, 13);
 
             lblColStatus.Location = new Point(statusColumnX, 20);
             lblColStatus.Size = new Size(statusColumnWidth, 13);
@@ -671,12 +678,12 @@ namespace SUP
         {
             int blocks = Math.Max(0, node.SyncedBlocks);
             int headers = Math.Max(blocks, node.ChainHeaders);
-            int behind = Math.Max(0, headers - blocks);
+            int blocksBehind = Math.Max(0, headers - blocks);
             string summary = string.Format("{0:N0}/{1:N0} blk", blocks, headers);
 
-            if (behind > 0)
+            if (blocksBehind > 0)
             {
-                double yearsBehind = EstimateYearsBehind(id, behind);
+                double yearsBehind = EstimateYearsBehind(id, blocksBehind);
                 summary += string.Format(" • {0:F1}y behind", yearsBehind);
             }
 

@@ -114,12 +114,12 @@ namespace SUP
             this.grpWalletNodes.TabIndex = 0;
 
             // Column headers
-            AddLabel(this.grpWalletNodes, this.lblColChain,   "Chain",    6,  20, 60,  13);
-            AddLabel(this.grpWalletNodes, this.lblColStatus,  "Status",  70,  20, 110, 13);
-            AddLabel(this.grpWalletNodes, this.lblColProgress,"Sync",   190,  20, 140, 13);
-            AddLabel(this.grpWalletNodes, this.lblColHeight,  "Height", 338,  20, 200, 13);
-            AddLabel(this.grpWalletNodes, this.lblColReindex, "Reindex",540,  20, 55,  13);
-            AddLabel(this.grpWalletNodes, this.lblColRescan,  "Rescan", 590,  20, 55,  13);
+            AddLabel(this.grpWalletNodes, this.lblColChain,   "Chain",   ChainColumnX,    20, ChainColumnWidth, 13);
+            AddLabel(this.grpWalletNodes, this.lblColStatus,  "Status",  StatusColumnX,   20, 110,              13);
+            AddLabel(this.grpWalletNodes, this.lblColProgress,"Sync",    ProgressColumnX, 20, 140,              13);
+            AddLabel(this.grpWalletNodes, this.lblColHeight,  "Height",  HeightColumnX,   20, 200,              13);
+            AddLabel(this.grpWalletNodes, this.lblColReindex, "Reindex", ReindexColumnX,  20, 55,               13);
+            AddLabel(this.grpWalletNodes, this.lblColRescan,  "Rescan",  RescanColumnX,   20, 55,               13);
 
             // Rows: y positions
             int[] rowY = { 40, 70, 100, 130, 160 };

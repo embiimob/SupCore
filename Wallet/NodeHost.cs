@@ -198,7 +198,8 @@ namespace SUP.Wallet
             return "Node executable not found: "
                 + Config.DaemonExeName
                 + " in "
-                + baseDir;
+                + baseDir
+                + ". Please add the daemon executable to that folder.";
         }
 
         public void Dispose()
