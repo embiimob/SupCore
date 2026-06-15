@@ -58,7 +58,7 @@ namespace SUP.Wallet
 
                 if (string.IsNullOrEmpty(daemonPath))
                 {
-                    StatusText = "Node executable not found";
+                    StatusText = BuildExecutableNotFoundMessage(baseDir);
                     StatusChanged?.Invoke(this, EventArgs.Empty);
                     return;
                 }
@@ -197,6 +197,14 @@ namespace SUP.Wallet
             }
 
             return null;
+        }
+
+        private string BuildExecutableNotFoundMessage(string baseDir)
+        {
+            return "Node executable not found: "
+                + string.Join(", ", GetExecutableCandidates())
+                + " in "
+                + baseDir;
         }
 
         private string[] GetExecutableCandidates()
