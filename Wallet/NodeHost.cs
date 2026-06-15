@@ -262,12 +262,23 @@ namespace SUP.Wallet
                     UpdateStatus(
                         $"Syncing headers… ({peerCount} peer{(peerCount == 1 ? "" : "s")})",
                         SyncedBlocks, _slimChain.Height);
+                    WriteLog($"Starting header sync at height {_slimChain.Height} with {peerCount} peer(s)");
 
                     try
                     {
-                        peer.SynchronizeSlimChain(_slimChain, null, token);
+                        // Guard against a stalled peer blocking indefinitely.
+                        using var headerCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                        headerCts.CancelAfter(TimeSpan.FromMinutes(5));
+                        peer.SynchronizeSlimChain(_slimChain, null, headerCts.Token);
                     }
-                    catch (OperationCanceledException) { break; }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
+                    catch (OperationCanceledException)
+                    {
+                        // Peer disconnected or 5-minute timeout — try again with a fresh peer.
+                        WriteLog("Header sync interrupted — retrying with new peer");
+                        Thread.Sleep(5000);
+                        continue;
+                    }
                     catch (Exception ex) when (!token.IsCancellationRequested)
                     {
                         WriteLog("Header sync error: " + ex.Message);
