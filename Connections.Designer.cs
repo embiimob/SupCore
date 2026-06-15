@@ -107,7 +107,7 @@ namespace SUP
             this.pnlMain.Controls.Add(this.grpMaintenance);
 
             // ── grpWalletNodes ────────────────────────────────────────────
-            this.grpWalletNodes.Text = "Wallet Nodes  (daemon replaces -qt)";
+            this.grpWalletNodes.Text = "Wallet Nodes";
             this.grpWalletNodes.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25f, System.Drawing.FontStyle.Bold);
             this.grpWalletNodes.Location = new System.Drawing.Point(8, 8);
             this.grpWalletNodes.Size = new System.Drawing.Size(746, 240);

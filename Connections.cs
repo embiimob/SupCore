@@ -18,6 +18,8 @@ namespace SUP
         // Per-coin UI rows indexed by CoinNetworkId
         private readonly Dictionary<CoinNetworkId, CoinStatusRow> _rows =
             new Dictionary<CoinNetworkId, CoinStatusRow>();
+        private readonly Dictionary<CoinNetworkId, int> _rowTops =
+            new Dictionary<CoinNetworkId, int>();
 
         private struct CoinStatusRow
         {
@@ -32,6 +34,7 @@ namespace SUP
         public Connections()
         {
             InitializeComponent();
+            grpWalletNodes.Resize += (s, e) => LayoutWalletNodeColumns();
             SetupTooltips();
             SetupStatusTimer();
         }
@@ -105,6 +108,8 @@ namespace SUP
                 BtnToggle  = btnMZC,   Progress = prgMZC,  LblStatus = lblStatusMZC,
                 LblHeight  = lblHeightMZC,  ChkReindex = chkReindexMZC,  ChkRescan = chkRescanMZC
             };
+
+            LayoutWalletNodeColumns();
 
             // Check IPFS daemon status
             Task.Run(CheckIpfsStatus);
@@ -546,39 +551,42 @@ namespace SUP
             var lblHeight = GetHeightLabel(id);
             var chkRe     = GetReindexChk(id);
             var chkRs     = GetRescanChk(id);
+            _rowTops[id]  = y;
 
             lblChain.Text     = chainLabel;
             lblChain.AutoSize = true;
-            lblChain.Location = new System.Drawing.Point(ScaleX(6), ScaleY(y + 4));
+            lblChain.Location = new System.Drawing.Point(6, y + 4);
 
             lblStatus.AutoSize = false;
-            lblStatus.Location = new System.Drawing.Point(ScaleX(70), ScaleY(y + 4));
-            lblStatus.Size     = new System.Drawing.Size(ScaleX(110), ScaleY(13));
+            lblStatus.Location = new System.Drawing.Point(70, y + 4);
+            lblStatus.Size     = new System.Drawing.Size(110, 13);
             lblStatus.Text     = "Stopped";
 
-            prg.Location = new System.Drawing.Point(ScaleX(190), ScaleY(y));
-            prg.Size     = new System.Drawing.Size(ScaleX(140), ScaleY(18));
+            prg.Location = new System.Drawing.Point(190, y);
+            prg.Size     = new System.Drawing.Size(140, 18);
             prg.Minimum  = 0;
             prg.Maximum  = 100;
             prg.Value    = 0;
 
             lblHeight.AutoSize = false;
-            lblHeight.Location = new System.Drawing.Point(ScaleX(338), ScaleY(y + 4));
-            lblHeight.Size     = new System.Drawing.Size(ScaleX(200), ScaleY(13));
+            lblHeight.Location = new System.Drawing.Point(338, y + 4);
+            lblHeight.Size     = new System.Drawing.Size(200, 13);
             lblHeight.Text     = "";
 
             chkRe.Text     = "";
-            chkRe.AutoSize = true;
-            chkRe.Location = new System.Drawing.Point(ScaleX(545), ScaleY(y + 2));
+            chkRe.AutoSize = false;
+            chkRe.Size     = new System.Drawing.Size(15, 15);
+            chkRe.Location = new System.Drawing.Point(545, y + 2);
 
             chkRs.Text     = "";
-            chkRs.AutoSize = true;
-            chkRs.Location = new System.Drawing.Point(ScaleX(596), ScaleY(y + 2));
+            chkRs.AutoSize = false;
+            chkRs.Size     = new System.Drawing.Size(15, 15);
+            chkRs.Location = new System.Drawing.Point(596, y + 2);
 
             btnToggle.Text     = "Start";
             btnToggle.Tag      = id;
-            btnToggle.Location = new System.Drawing.Point(ScaleX(640), ScaleY(y - 1));
-            btnToggle.Size     = new System.Drawing.Size(ScaleX(72), ScaleY(23));
+            btnToggle.Location = new System.Drawing.Point(640, y - 1);
+            btnToggle.Size     = new System.Drawing.Size(72, 23);
             btnToggle.Click   += new System.EventHandler(this.BtnToggle_Click);
             btnToggle.BringToFront();
 
@@ -598,22 +606,65 @@ namespace SUP
             parent.Controls.Add(lbl);
         }
 
-        private int ScaleX(int value)
+        private void LayoutWalletNodeColumns()
         {
-            return ScaleDimension(value, AutoScaleDimensions.Width, CurrentAutoScaleDimensions.Width);
-        }
+            if (grpWalletNodes == null || grpWalletNodes.IsDisposed)
+                return;
 
-        private int ScaleY(int value)
-        {
-            return ScaleDimension(value, AutoScaleDimensions.Height, CurrentAutoScaleDimensions.Height);
-        }
+            int buttonWidth = 72;
+            int buttonHeight = 23;
+            int buttonRightMargin = 12;
+            int buttonX = Math.Max(0, grpWalletNodes.ClientSize.Width - buttonRightMargin - buttonWidth);
+            int rescanColumnX = buttonX - 56;
+            int reindexColumnX = rescanColumnX - 56;
+            int heightColumnX = 338;
+            int heightColumnWidth = Math.Max(120, reindexColumnX - heightColumnX - 10);
+            int progressColumnX = 190;
+            int progressColumnWidth = Math.Max(90, heightColumnX - progressColumnX - 8);
+            int statusColumnX = 70;
+            int statusColumnWidth = Math.Max(80, progressColumnX - statusColumnX - 10);
 
-        private static int ScaleDimension(int value, float designUnits, float currentUnits)
-        {
-            if (value == 0 || designUnits <= 0f || currentUnits <= 0f)
-                return value;
+            lblColChain.Location = new Point(6, 20);
+            lblColChain.Size = new Size(60, 13);
 
-            return (int)Math.Round(value * (currentUnits / designUnits));
+            lblColStatus.Location = new Point(statusColumnX, 20);
+            lblColStatus.Size = new Size(statusColumnWidth, 13);
+
+            lblColProgress.Location = new Point(progressColumnX, 20);
+            lblColProgress.Size = new Size(progressColumnWidth, 13);
+
+            lblColHeight.Location = new Point(heightColumnX, 20);
+            lblColHeight.Size = new Size(heightColumnWidth, 13);
+
+            lblColReindex.Location = new Point(reindexColumnX, 20);
+            lblColReindex.Size = new Size(50, 13);
+
+            lblColRescan.Location = new Point(rescanColumnX, 20);
+            lblColRescan.Size = new Size(50, 13);
+
+            foreach (var pair in _rowTops)
+            {
+                if (!_rows.TryGetValue(pair.Key, out var row))
+                    continue;
+
+                int y = pair.Value;
+
+                row.LblStatus.Location = new Point(statusColumnX, y + 4);
+                row.LblStatus.Size = new Size(statusColumnWidth, 13);
+
+                row.Progress.Location = new Point(progressColumnX, y);
+                row.Progress.Size = new Size(progressColumnWidth, 18);
+
+                row.LblHeight.Location = new Point(heightColumnX, y + 4);
+                row.LblHeight.Size = new Size(heightColumnWidth, 13);
+
+                row.ChkReindex.Location = new Point(reindexColumnX + 18, y + 2);
+                row.ChkRescan.Location = new Point(rescanColumnX + 16, y + 2);
+
+                row.BtnToggle.Location = new Point(buttonX, y - 1);
+                row.BtnToggle.Size = new Size(buttonWidth, buttonHeight);
+                row.BtnToggle.BringToFront();
+            }
         }
 
         private static string BuildHeightSummary(CoinNetworkId id, WalletManager wallet, NodeHost node)

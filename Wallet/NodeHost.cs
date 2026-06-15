@@ -189,40 +189,16 @@ namespace SUP.Wallet
 
         private string ResolveExecutablePath(string baseDir)
         {
-            foreach (string fileName in GetExecutableCandidates())
-            {
-                string candidatePath = Path.Combine(baseDir, fileName);
-                if (File.Exists(candidatePath))
-                    return candidatePath;
-            }
-
-            return null;
+            string candidatePath = Path.Combine(baseDir, Config.DaemonExeName);
+            return File.Exists(candidatePath) ? candidatePath : null;
         }
 
         private string BuildExecutableNotFoundMessage(string baseDir)
         {
             return "Node executable not found: "
-                + string.Join(", ", GetExecutableCandidates())
+                + Config.DaemonExeName
                 + " in "
                 + baseDir;
-        }
-
-        private string[] GetExecutableCandidates()
-        {
-            switch (Config.Id)
-            {
-                case CoinNetworkId.BitcoinTestnet:
-                case CoinNetworkId.BitcoinMainnet:
-                    return new[] { "bitcoind.exe", "bitcoin-qt.exe" };
-                case CoinNetworkId.Litecoin:
-                    return new[] { "litecoind.exe", "litecoin-qt.exe" };
-                case CoinNetworkId.Dogecoin:
-                    return new[] { "dogecoind.exe", "dogecoin-qt.exe" };
-                case CoinNetworkId.Mazacoin:
-                    return new[] { "mazad.exe", "maza-qt.exe" };
-                default:
-                    return new[] { Config.DaemonExeName };
-            }
         }
 
         public void Dispose()
