@@ -223,7 +223,6 @@ namespace SUP
                     ? wallet.GetAddresses().Count + " addr"
                     : "";
             }
-            row.BtnToggle.BringToFront();
         }
 
         private void RefreshAllStatus()
@@ -579,6 +578,7 @@ namespace SUP
             btnToggle.Location = new System.Drawing.Point(640, y - 1);
             btnToggle.Size     = new System.Drawing.Size(72, 23);
             btnToggle.Click   += new System.EventHandler(this.BtnToggle_Click);
+            btnToggle.BringToFront();
 
             foreach (System.Windows.Forms.Control c in new System.Windows.Forms.Control[] {
                 lblChain, lblStatus, prg, lblHeight, chkRe, chkRs, btnToggle })
