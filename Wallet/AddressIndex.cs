@@ -36,6 +36,10 @@ namespace SUP.Wallet
         private readonly Dictionary<string, List<GetRawDataTransactionResponse>> _cache =
             new Dictionary<string, List<GetRawDataTransactionResponse>>(StringComparer.OrdinalIgnoreCase);
 
+        // Tracks seen txids per address for O(1) deduplication during indexing.
+        private readonly Dictionary<string, HashSet<string>> _seenTxIds =
+            new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
         private bool _dirty;
 
         /// <summary>Highest block height that has been fully indexed.</summary>
@@ -140,8 +144,13 @@ namespace SUP.Wallet
                 list = new List<GetRawDataTransactionResponse>();
                 _cache[address] = list;
             }
-            // Deduplicate by txid
-            if (!list.Any(t => t.txid == tx.txid))
+            // O(1) deduplication via per-address HashSet
+            if (!_seenTxIds.TryGetValue(address, out var seen))
+            {
+                seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                _seenTxIds[address] = seen;
+            }
+            if (seen.Add(tx.txid))
                 list.Add(tx);
         }
 
@@ -207,7 +216,14 @@ namespace SUP.Wallet
                 var txs = JsonConvert.DeserializeObject<List<GetRawDataTransactionResponse>>(
                     File.ReadAllText(path));
                 if (txs != null)
+                {
                     _cache[address] = txs;
+                    // Rebuild the seen-txid set so AppendTx deduplicates correctly
+                    // against transactions that were persisted in a prior session.
+                    _seenTxIds[address] = new HashSet<string>(
+                        txs.Select(t => t.txid ?? ""),
+                        StringComparer.OrdinalIgnoreCase);
+                }
             }
             catch { }
         }

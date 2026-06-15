@@ -121,7 +121,10 @@ namespace SUP.Wallet
                 try { result = Dispatch(method, @params, id, coinCfg); }
                 catch (Exception ex)
                 {
-                    SendError(ctx, -32603, ex.Message, id);
+                    // Log the real error server-side; send only a generic message to the caller
+                    // to avoid leaking internal exception details (e.g. file paths, stack frames).
+                    System.Diagnostics.Debug.WriteLine("[RPC] Dispatch error: " + ex);
+                    SendError(ctx, -32603, "Internal error", id);
                     return;
                 }
 
