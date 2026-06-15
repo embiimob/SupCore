@@ -217,7 +217,9 @@ namespace SUP
                 row.BtnToggle.Text      = "Start";
                 row.BtnToggle.BackColor = SystemColors.Control;
                 row.BtnToggle.ForeColor = SystemColors.ControlText;
-                row.LblStatus.Text      = wallet.IsOpen ? "Wallet Open" : "Stopped";
+                row.LblStatus.Text      = string.IsNullOrWhiteSpace(node.StatusText) || node.StatusText == "Stopped"
+                    ? (wallet.IsOpen ? "Wallet Open" : "Stopped")
+                    : node.StatusText;
                 row.Progress.Value      = 0;
                 row.LblHeight.Text      = wallet.IsOpen
                     ? wallet.GetAddresses().Count + " addr"
@@ -547,36 +549,36 @@ namespace SUP
 
             lblChain.Text     = chainLabel;
             lblChain.AutoSize = true;
-            lblChain.Location = new System.Drawing.Point(6, y + 4);
+            lblChain.Location = new System.Drawing.Point(ScaleX(6), ScaleY(y + 4));
 
             lblStatus.AutoSize = false;
-            lblStatus.Location = new System.Drawing.Point(70, y + 4);
-            lblStatus.Size     = new System.Drawing.Size(110, 13);
+            lblStatus.Location = new System.Drawing.Point(ScaleX(70), ScaleY(y + 4));
+            lblStatus.Size     = new System.Drawing.Size(ScaleX(110), ScaleY(13));
             lblStatus.Text     = "Stopped";
 
-            prg.Location = new System.Drawing.Point(190, y);
-            prg.Size     = new System.Drawing.Size(140, 18);
+            prg.Location = new System.Drawing.Point(ScaleX(190), ScaleY(y));
+            prg.Size     = new System.Drawing.Size(ScaleX(140), ScaleY(18));
             prg.Minimum  = 0;
             prg.Maximum  = 100;
             prg.Value    = 0;
 
             lblHeight.AutoSize = false;
-            lblHeight.Location = new System.Drawing.Point(338, y + 4);
-            lblHeight.Size     = new System.Drawing.Size(200, 13);
+            lblHeight.Location = new System.Drawing.Point(ScaleX(338), ScaleY(y + 4));
+            lblHeight.Size     = new System.Drawing.Size(ScaleX(200), ScaleY(13));
             lblHeight.Text     = "";
 
             chkRe.Text     = "";
             chkRe.AutoSize = true;
-            chkRe.Location = new System.Drawing.Point(545, y + 2);
+            chkRe.Location = new System.Drawing.Point(ScaleX(545), ScaleY(y + 2));
 
             chkRs.Text     = "";
             chkRs.AutoSize = true;
-            chkRs.Location = new System.Drawing.Point(596, y + 2);
+            chkRs.Location = new System.Drawing.Point(ScaleX(596), ScaleY(y + 2));
 
             btnToggle.Text     = "Start";
             btnToggle.Tag      = id;
-            btnToggle.Location = new System.Drawing.Point(640, y - 1);
-            btnToggle.Size     = new System.Drawing.Size(72, 23);
+            btnToggle.Location = new System.Drawing.Point(ScaleX(640), ScaleY(y - 1));
+            btnToggle.Size     = new System.Drawing.Size(ScaleX(72), ScaleY(23));
             btnToggle.Click   += new System.EventHandler(this.BtnToggle_Click);
             btnToggle.BringToFront();
 
@@ -594,6 +596,24 @@ namespace SUP
             lbl.Location = new System.Drawing.Point(x, y);
             lbl.Size     = new System.Drawing.Size(w, h);
             parent.Controls.Add(lbl);
+        }
+
+        private int ScaleX(int value)
+        {
+            return ScaleDimension(value, AutoScaleDimensions.Width, CurrentAutoScaleDimensions.Width);
+        }
+
+        private int ScaleY(int value)
+        {
+            return ScaleDimension(value, AutoScaleDimensions.Height, CurrentAutoScaleDimensions.Height);
+        }
+
+        private static int ScaleDimension(int value, float designUnits, float currentUnits)
+        {
+            if (value == 0 || designUnits <= 0f || currentUnits <= 0f)
+                return value;
+
+            return (int)Math.Round(value * (currentUnits / designUnits));
         }
 
         private static string BuildHeightSummary(CoinNetworkId id, WalletManager wallet, NodeHost node)

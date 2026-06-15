@@ -52,13 +52,13 @@ namespace SUP.Wallet
                 if (IsRunning) return;
 
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string daemonPath = Path.Combine(baseDir, Config.DaemonExeName);
                 string dataDir = Path.Combine(baseDir, Config.DataDirectory);
                 Directory.CreateDirectory(dataDir);
+                string daemonPath = ResolveExecutablePath(baseDir);
 
-                if (!File.Exists(daemonPath))
+                if (string.IsNullOrEmpty(daemonPath))
                 {
-                    StatusText = "Daemon not found: " + Config.DaemonExeName;
+                    StatusText = "Node executable not found";
                     StatusChanged?.Invoke(this, EventArgs.Empty);
                     return;
                 }
@@ -185,6 +185,36 @@ namespace SUP.Wallet
             if (reindex) sb.Append(" -reindex");
             if (rescan) sb.Append(" -rescan");
             return sb.ToString();
+        }
+
+        private string ResolveExecutablePath(string baseDir)
+        {
+            foreach (string fileName in GetExecutableCandidates())
+            {
+                string candidatePath = Path.Combine(baseDir, fileName);
+                if (File.Exists(candidatePath))
+                    return candidatePath;
+            }
+
+            return null;
+        }
+
+        private string[] GetExecutableCandidates()
+        {
+            switch (Config.Id)
+            {
+                case CoinNetworkId.BitcoinTestnet:
+                case CoinNetworkId.BitcoinMainnet:
+                    return new[] { "bitcoind.exe", "bitcoin-qt.exe" };
+                case CoinNetworkId.Litecoin:
+                    return new[] { "litecoind.exe", "litecoin-qt.exe" };
+                case CoinNetworkId.Dogecoin:
+                    return new[] { "dogecoind.exe", "dogecoin-qt.exe" };
+                case CoinNetworkId.Mazacoin:
+                    return new[] { "mazad.exe", "maza-qt.exe" };
+                default:
+                    return new[] { Config.DaemonExeName };
+            }
         }
 
         public void Dispose()
