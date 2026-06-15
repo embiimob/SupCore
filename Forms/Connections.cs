@@ -22,6 +22,9 @@ namespace SupCore.Forms
         private readonly Dictionary<CoinType, Label> _statusLabels = new();
         private readonly Dictionary<CoinType, Button> _startButtons = new();
 
+        // Tracks which coins are currently online so the timer only polls connected ones.
+        private readonly HashSet<CoinType> _onlineCoins = new();
+
         public Connections(WalletManager walletManager)
         {
             _walletManager = walletManager;
@@ -86,7 +89,12 @@ namespace SupCore.Forms
         private void SetupRefreshTimer()
         {
             _refreshTimer = new System.Windows.Forms.Timer { Interval = 30_000 };
-            _refreshTimer.Tick += async (_, _) => await RefreshAllStatusAsync();
+            // Only refresh coins that are already online to avoid hammering APIs for offline coins.
+            _refreshTimer.Tick += async (_, _) =>
+            {
+                foreach (var coin in _onlineCoins.ToList())
+                    await RefreshStatusAsync(coin);
+            };
             _refreshTimer.Start();
         }
 
@@ -133,6 +141,11 @@ namespace SupCore.Forms
 
         private void UpdateCoinUI(CoinType coin, SyncStatus status)
         {
+            if (status.IsOnline)
+                _onlineCoins.Add(coin);
+            else
+                _onlineCoins.Remove(coin);
+
             if (_statusLabels.TryGetValue(coin, out var lbl))
             {
                 lbl.Text = status.StatusText;

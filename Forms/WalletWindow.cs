@@ -18,7 +18,35 @@ namespace SupCore.Forms
             PopulateCoinTabs();
         }
 
-        // ── Helpers ────────────────────────────────────────────────────────────────
+        // ── Simple input dialog (replaces VB InputBox) ─────────────────────────────
+        private static string? ShowInputDialog(string prompt, string title, string defaultValue = "")
+        {
+            using var dlg = new Form
+            {
+                Text = title,
+                ClientSize = new Size(420, 110),
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = FormStartPosition.CenterParent,
+                MaximizeBox = false,
+                MinimizeBox = false
+            };
+            var lbl = new Label { Text = prompt, Location = new Point(10, 10), AutoSize = true };
+            var txt = new TextBox { Text = defaultValue, Location = new Point(10, 32), Width = 395 };
+            var btnOk = new Button
+            {
+                Text = "OK", DialogResult = DialogResult.OK,
+                Location = new Point(250, 68), Width = 75
+            };
+            var btnCancel = new Button
+            {
+                Text = "Cancel", DialogResult = DialogResult.Cancel,
+                Location = new Point(330, 68), Width = 75
+            };
+            dlg.Controls.AddRange(new Control[] { lbl, txt, btnOk, btnCancel });
+            dlg.AcceptButton = btnOk;
+            dlg.CancelButton = btnCancel;
+            return dlg.ShowDialog() == DialogResult.OK ? txt.Text : null;
+        }
 
         private void PopulateCoinTabs()
         {
@@ -141,15 +169,13 @@ namespace SupCore.Forms
 
         private void NewAddress(CoinType coin, ListBox lst)
         {
-            string label = Microsoft.VisualBasic.Interaction.InputBox(
-                "Enter an optional label for the new address:", "New Address", "");
-
             if (_walletManager.IsLocked && _walletManager.HasPassword)
             {
                 MessageBox.Show("Please unlock the wallet before generating new keys.", "Wallet Locked",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+            string label = ShowInputDialog("Enter an optional label for the new address:", "New Address") ?? "";
             string address = _walletManager.GenerateNewKey(coin, label);
             RefreshAddressList(coin, lst);
             MessageBox.Show($"New address created:\n{address}", "Address Generated",
@@ -158,8 +184,8 @@ namespace SupCore.Forms
 
         private void ImportKey(CoinType coin, ListBox lst)
         {
-            string wif = Microsoft.VisualBasic.Interaction.InputBox(
-                $"Enter the WIF private key to import ({coin.GetDisplayName()}):", "Import Private Key", "");
+            string? wif = ShowInputDialog(
+                $"Enter the WIF private key to import ({coin.GetDisplayName()}):", "Import Private Key");
             if (string.IsNullOrWhiteSpace(wif)) return;
 
             if (_walletManager.IsLocked && _walletManager.HasPassword)
@@ -169,8 +195,7 @@ namespace SupCore.Forms
                 return;
             }
 
-            string label = Microsoft.VisualBasic.Interaction.InputBox(
-                "Optional label:", "Import Key", "imported");
+            string label = ShowInputDialog("Optional label:", "Import Key", "imported") ?? "imported";
 
             try
             {

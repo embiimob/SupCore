@@ -103,7 +103,11 @@ namespace SupCore.Wallet
                     return satoshis / 100_000_000m;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to retrieve balance for {address} on {coin}: {ex.Message}", ex);
+            }
             return 0m;
         }
 
@@ -146,7 +150,11 @@ namespace SupCore.Wallet
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to retrieve UTXOs for {address} on {coin}: {ex.Message}", ex);
+            }
             return result;
         }
 

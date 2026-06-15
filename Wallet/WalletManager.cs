@@ -127,17 +127,28 @@ namespace SupCore.Wallet
             byte[] key = DeriveKey(password, salt);
             string saltB64 = Convert.ToBase64String(salt);
 
+            // Build the new encrypted state for every coin wallet *before* writing anything,
+            // so a mid-operation failure leaves the on-disk files unmodified.
+            var pendingUpdates = new Dictionary<CoinType, (WalletFile wf, List<string> newKeys)>();
             foreach (CoinType coin in Enum.GetValues<CoinType>())
             {
                 var wf = _wallets[coin];
-                wf.Salt = saltB64;
+                var newKeys = new List<string>(wf.Entries.Count);
                 foreach (var entry in wf.Entries)
                 {
-                    // If the entry looks like plain WIF (not encrypted) re-encrypt it.
-                    // Encrypted values are base64-encoded binary so they won't parse as WIF.
-                    if (IsPlainWif(entry.EncryptedKey))
-                        entry.EncryptedKey = Encrypt(entry.EncryptedKey, key);
+                    newKeys.Add(IsPlainWif(entry.EncryptedKey)
+                        ? Encrypt(entry.EncryptedKey, key)
+                        : entry.EncryptedKey);
                 }
+                pendingUpdates[coin] = (wf, newKeys);
+            }
+
+            // All encryption succeeded – apply and persist.
+            foreach (var (coin, (wf, newKeys)) in pendingUpdates)
+            {
+                wf.Salt = saltB64;
+                for (int i = 0; i < wf.Entries.Count; i++)
+                    wf.Entries[i].EncryptedKey = newKeys[i];
                 SaveWallet(coin);
             }
             _aesKey = null; // lock after encrypting
@@ -158,7 +169,11 @@ namespace SupCore.Wallet
                     if (!IsPlainWif(entry.EncryptedKey))
                     {
                         try { Decrypt(entry.EncryptedKey, key); }
-                        catch { return false; }
+                        catch (CryptographicException)
+                        {
+                            // Decryption with the supplied key failed → wrong password.
+                            return false;
+                        }
                         _aesKey = key;
                         return true;
                     }
@@ -293,9 +308,9 @@ namespace SupCore.Wallet
             foreach (var (txid, vout, sats) in selectedUtxos)
             {
                 var outPoint = new OutPoint(uint256.Parse(txid), (uint)vout);
-                var coin2 = new NBitcoin.Coin(outPoint, new TxOut(Money.Satoshis(sats),
+                var utxoCoin = new NBitcoin.Coin(outPoint, new TxOut(Money.Satoshis(sats),
                     secret.PubKey.GetAddress(ScriptPubKeyType.Legacy, network)));
-                txBuilder.AddCoins(coin2);
+                txBuilder.AddCoins(utxoCoin);
             }
 
             var destAddress = BitcoinAddress.Create(toAddress, network);
