@@ -267,9 +267,11 @@ namespace SUP.Wallet
                     try
                     {
                         // Guard against a stalled peer blocking indefinitely.
-                        using var headerCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-                        headerCts.CancelAfter(TimeSpan.FromMinutes(5));
-                        peer.SynchronizeSlimChain(_slimChain, null, headerCts.Token);
+                        using (var headerCts = CancellationTokenSource.CreateLinkedTokenSource(token))
+                        {
+                            headerCts.CancelAfter(TimeSpan.FromMinutes(5));
+                            peer.SynchronizeSlimChain(_slimChain, null, headerCts.Token);
+                        }
                     }
                     catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
                     catch (OperationCanceledException)
