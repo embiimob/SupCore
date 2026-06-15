@@ -24,6 +24,7 @@ using System.Text;
 using NReco.VideoConverter;
 using static System.Net.Mime.MediaTypeNames;
 using Microsoft.Win32;
+using SupCore.Wallet;
 
 namespace SUP
 {
@@ -63,6 +64,7 @@ namespace SUP
         {
             ".wav", ".mp3", ".ogg", ".oga", ".opus", ".flac", ".m4a", ".aac", ".wma", ".weba", ".webm"
         };
+        private readonly WalletManager _walletManager = new WalletManager();
 
         private bool btcActive;
         private bool mzcActive;
@@ -136,7 +138,7 @@ namespace SUP
             myTooltip.SetToolTip(btnMint, "click  💎 to open the sup profile and object minting menu.\nif 🔍 click to reload the object search panel.");
             myTooltip.SetToolTip(btnJukeBox, "click 🎵 to open the jukebox audio searching tool.\nthe active profile will be searched by default.");
             myTooltip.SetToolTip(btnBlock, "click to attempt to remove and block all transactions signed by the active profile.\n\nnote: signature blocks must be removed from the workbench.");
-            myTooltip.SetToolTip(btnConnections, "click 🗝 to open the sup connections panel.\n\nfrom the connection panel you can:\nlaunch all 5 blockchains included with sup\nenable or disable various user preferences\nenable the IPFS dameon and perform related functions\npurge and clear cached data, blocks and mutes.");
+            myTooltip.SetToolTip(btnConnections, "click 🗝 to open the internal wallet connections panel.\n\nfrom the connection panel you can:\nsee per-chain sync status\nopen wallet management for each supported blockchain\nmanage IPFS and related cache functions.");
             myTooltip.SetToolTip(btnDisco, "click 📣 to open the sup direct messaging panel.\nthe to: field is prepopulated with the active profile address.\nclick on 🤐 before clicking 📣 to send the active profile a private message\n\nnote: search for your own local profile first to prepopulate the from: field.");
             myTooltip.SetToolTip(btnFollow, "click to add the currently active profile or #search term to your follow list.");
             myTooltip.SetToolTip(btnHome, "click to view the active profile's link list if any have been published.");
@@ -1695,16 +1697,7 @@ namespace SUP
 
         private void ButtonLoadConnections(object sender, EventArgs e)
         {
-            if (splitContainer1.Panel2Collapsed)
-            {
-                splitContainer1.Panel2Collapsed = false;
-            }
-            else
-            {
-                new Connections().Show();
-            }
-
-
+            new SupCore.Forms.Connections(_walletManager).Show(this);
         }
 
         private void tmrSearchMemoryPool_Tick(object sender, EventArgs e)

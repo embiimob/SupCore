@@ -19,6 +19,7 @@ namespace SupCore.Forms
 
         // Status labels per coin – populated by InitializeComponent / BuildCoinRow
         private readonly Dictionary<CoinType, Label> _statusLabels = new();
+        private readonly Dictionary<CoinType, Label> _walletSummaryLabels = new();
         private readonly Dictionary<CoinType, Button> _startButtons = new();
 
         // Tracks which coins are currently online so the timer only polls connected ones.
@@ -40,7 +41,7 @@ namespace SupCore.Forms
             foreach (CoinType coin in Enum.GetValues<CoinType>())
             {
                 BuildCoinRow(coin, y);
-                y += 52;
+                y += 74;
             }
         }
 
@@ -61,25 +62,45 @@ namespace SupCore.Forms
                 Name = $"lblStatus_{coin}",
                 Text = "Not connected",
                 Location = new Point(200, y + 4),
-                Width = 360,
+                Width = 350,
                 ForeColor = System.Drawing.Color.Gray
             };
             _statusLabels[coin] = lblStatus;
 
-                // Start / Refresh button
+            var lblWallet = new Label
+            {
+                Name = $"lblWallet_{coin}",
+                Text = "Wallet: 0 addresses • balance unavailable",
+                Location = new Point(200, y + 26),
+                Width = 350,
+                ForeColor = System.Drawing.Color.DimGray
+            };
+            _walletSummaryLabels[coin] = lblWallet;
+
+            // Start / Refresh button
             var btnStart = new Button
             {
-                    Name = $"btn_{coin}",
-                    Text = "Connect",
-                    Location = new Point(570, y),
-                    Width = 100,
-                    Height = 26,
-                    BackColor = System.Drawing.Color.WhiteSmoke
+                Name = $"btn_{coin}",
+                Text = "Connect",
+                Location = new Point(565, y),
+                Width = 105,
+                Height = 26,
+                BackColor = System.Drawing.Color.WhiteSmoke
             };
             btnStart.Click += async (_, _) => await ConnectCoinAsync(coin);
             _startButtons[coin] = btnStart;
 
-            pnlCoins.Controls.AddRange(new Control[] { lblName, lblStatus, btnStart });
+            var btnWallet = new Button
+            {
+                Name = $"btnWallet_{coin}",
+                Text = "Open Wallet",
+                Location = new Point(565, y + 30),
+                Width = 105,
+                Height = 26
+            };
+            btnWallet.Click += (_, _) => OpenWallet(coin);
+
+            pnlCoins.Controls.AddRange(new Control[] { lblName, lblStatus, lblWallet, btnStart, btnWallet });
         }
 
         private void SetupRefreshTimer()
@@ -99,7 +120,10 @@ namespace SupCore.Forms
         {
             // Check which coins are already reachable
             foreach (var coin in Enum.GetValues<CoinType>())
+            {
                 _ = RefreshStatusAsync(coin); // fire-and-forget; update UI when done
+                _ = RefreshWalletSummaryAsync(coin);
+            }
         }
 
         // ── API connectivity ───────────────────────────────────────────────────────
@@ -137,6 +161,27 @@ namespace SupCore.Forms
         {
             foreach (CoinType coin in Enum.GetValues<CoinType>())
                 await RefreshStatusAsync(coin);
+        }
+
+        private async Task RefreshWalletSummaryAsync(CoinType coin)
+        {
+            string summary;
+            try
+            {
+                int addressCount = _walletManager.GetEntries(coin).Count;
+                decimal totalBalance = await _walletManager.GetTotalBalanceAsync(coin).ConfigureAwait(false);
+                summary = $"Wallet: {addressCount} address(es) • total {totalBalance:0.########} {coin.GetShortName()}";
+            }
+            catch (Exception ex)
+            {
+                int addressCount = _walletManager.GetEntries(coin).Count;
+                summary = $"Wallet: {addressCount} address(es) • balance unavailable ({ex.Message})";
+            }
+
+            if (InvokeRequired)
+                Invoke(() => UpdateWalletSummaryUI(coin, summary));
+            else
+                UpdateWalletSummaryUI(coin, summary);
         }
 
         private void UpdateCoinUI(CoinType coin, SyncStatus status)
@@ -177,6 +222,19 @@ namespace SupCore.Forms
                     btn.BackColor = System.Drawing.Color.MistyRose;
                 }
             }
+        }
+
+        private void UpdateWalletSummaryUI(CoinType coin, string summary)
+        {
+            if (_walletSummaryLabels.TryGetValue(coin, out var lbl))
+                lbl.Text = summary;
+        }
+
+        private void OpenWallet(CoinType coin)
+        {
+            var wallet = new WalletWindow(_walletManager, coin);
+            wallet.FormClosed += async (_, _) => await RefreshWalletSummaryAsync(coin);
+            wallet.Show(this);
         }
 
         // ── IPFS panel (preserved from original) ──────────────────────────────────

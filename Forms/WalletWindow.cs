@@ -10,12 +10,15 @@ namespace SupCore.Forms
     public partial class WalletWindow : Form
     {
         private readonly WalletManager _walletManager;
+        private readonly CoinType? _selectedCoin;
 
-        public WalletWindow(WalletManager walletManager)
+        public WalletWindow(WalletManager walletManager, CoinType? selectedCoin = null)
         {
             _walletManager = walletManager;
+            _selectedCoin = selectedCoin;
             InitializeComponent();
             PopulateCoinTabs();
+            SelectInitialCoinTab();
         }
 
         // ── Simple input dialog (replaces VB InputBox) ─────────────────────────────
@@ -54,6 +57,20 @@ namespace SupCore.Forms
             {
                 var tab = BuildCoinTab(coin);
                 tabControl.TabPages.Add(tab);
+            }
+        }
+
+        private void SelectInitialCoinTab()
+        {
+            if (!_selectedCoin.HasValue) return;
+
+            foreach (TabPage page in tabControl.TabPages)
+            {
+                if (page.Tag is CoinType coin && coin == _selectedCoin.Value)
+                {
+                    tabControl.SelectedTab = page;
+                    break;
+                }
             }
         }
 
