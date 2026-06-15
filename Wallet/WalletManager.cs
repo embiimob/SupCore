@@ -14,7 +14,7 @@ namespace SupCore.Wallet
     public class WalletManager
     {
         // ── Configuration ──────────────────────────────────────────────────────────
-        private const int PbkdfIterations = 100_000;
+        private const int PbkdfIterations = 310_000; // OWASP minimum for PBKDF2-HMAC-SHA256 (2023)
         private const int AesKeySize = 32; // 256-bit
         private const int AesIvSize = 16;  // 128-bit
 
@@ -189,8 +189,8 @@ namespace SupCore.Wallet
         private static bool IsPlainWif(string value)
         {
             if (string.IsNullOrEmpty(value)) return false;
-            // WIF starts with 5/K/L (mainnet) or c/9 (testnet) and is 51-52 chars
-            return (value[0] is '5' or 'K' or 'L' or 'c' or '9') && value.Length is >= 51 and <= 53;
+            // WIF starts with 5/K/L (mainnet) or c/9 (testnet) and is 51 or 52 characters
+            return (value[0] is '5' or 'K' or 'L' or 'c' or '9') && value.Length is >= 51 and <= 52;
         }
 
         private string GetPlainKey(WalletEntry entry)
@@ -269,14 +269,14 @@ namespace SupCore.Wallet
         /// <param name="coin">Target coin.</param>
         /// <param name="fromAddress">Source address (must be in wallet).</param>
         /// <param name="toAddress">Recipient address.</param>
-        /// <param name="amountBtc">Amount to send (in coin units, not satoshis).</param>
+        /// <param name="amount">Amount to send (in coin units, not satoshis).</param>
         /// <param name="feeSatoshis">Network fee in satoshis. Defaults to 1000.</param>
         /// <returns>The broadcast transaction ID.</returns>
         public async Task<string> SendAsync(
             CoinType coin,
             string fromAddress,
             string toAddress,
-            decimal amountBtc,
+            decimal amount,
             long feeSatoshis = 1000)
         {
             if (coin == CoinType.Mazacoin)
@@ -291,7 +291,7 @@ namespace SupCore.Wallet
             var utxos = await BlockchainApiClient.GetUtxosAsync(coin, fromAddress).ConfigureAwait(false);
             if (utxos.Count == 0) throw new InvalidOperationException("No spendable UTXOs found.");
 
-            long amountSatoshis = (long)(amountBtc * 100_000_000m);
+            long amountSatoshis = (long)(amount * 100_000_000m);
             long total = 0;
             var selectedUtxos = new List<(string txid, int vout, long sats)>();
             foreach (var utxo in utxos.OrderByDescending(u => u.satoshis))

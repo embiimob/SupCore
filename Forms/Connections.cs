@@ -193,10 +193,18 @@ namespace SupCore.Forms
 
         private void chkLiveFeedPinning_CheckedChanged(object sender, EventArgs e)
         {
-            if (chkLiveFeedPinning.Checked)
-                File.WriteAllText("IPFS_PINNING_ENABLED", "1");
-            else
-                File.Delete("IPFS_PINNING_ENABLED");
+            try
+            {
+                if (chkLiveFeedPinning.Checked)
+                    File.WriteAllText("IPFS_PINNING_ENABLED", "1");
+                else if (File.Exists("IPFS_PINNING_ENABLED"))
+                    File.Delete("IPFS_PINNING_ENABLED");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not update IPFS pinning flag: {ex.Message}", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         private void btnPurge_Click(object sender, EventArgs e)
@@ -207,9 +215,18 @@ namespace SupCore.Forms
 
             string[] filesToDelete = { "IPFS_PINNING_ENABLED", "IPFS_API_HELPERS_ENABLED",
                                         "WALKIE_TALKIE_ENABLED", "LIVE_FILTER_ENABLED" };
+            var errors = new List<string>();
             foreach (var f in filesToDelete)
-                if (File.Exists(f)) File.Delete(f);
-            MessageBox.Show("Cache purged.", "Done");
+            {
+                try { if (File.Exists(f)) File.Delete(f); }
+                catch (Exception ex) { errors.Add($"{f}: {ex.Message}"); }
+            }
+
+            if (errors.Count > 0)
+                MessageBox.Show("Some files could not be deleted:\n" + string.Join("\n", errors),
+                    "Partial Purge", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            else
+                MessageBox.Show("Cache purged.", "Done");
         }
     }
 }

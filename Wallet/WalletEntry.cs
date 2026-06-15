@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace SupCore.Wallet
 {
@@ -7,21 +7,21 @@ namespace SupCore.Wallet
     /// </summary>
     public class WalletEntry
     {
-        [JsonPropertyName("address")]
+        [JsonProperty("address")]
         public string Address { get; set; } = string.Empty;
 
         /// <summary>
         /// WIF private key, AES-256 encrypted and Base64-encoded when wallet is locked.
         /// Plain WIF when wallet is unlocked (never persisted in plain form).
         /// </summary>
-        [JsonPropertyName("encryptedKey")]
+        [JsonProperty("encryptedKey")]
         public string EncryptedKey { get; set; } = string.Empty;
 
         /// <summary>User-supplied label for this address.</summary>
-        [JsonPropertyName("label")]
+        [JsonProperty("label")]
         public string Label { get; set; } = string.Empty;
 
-        [JsonPropertyName("createdAt")]
+        [JsonProperty("createdAt")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
@@ -30,20 +30,20 @@ namespace SupCore.Wallet
     /// </summary>
     public class WalletFile
     {
-        [JsonPropertyName("version")]
+        [JsonProperty("version")]
         public int Version { get; set; } = 1;
 
-        [JsonPropertyName("coin")]
+        [JsonProperty("coin")]
         public string Coin { get; set; } = string.Empty;
 
         /// <summary>
         /// PBKDF2 salt (Base64) used to derive the AES key from the password.
         /// Null when the wallet has no password set.
         /// </summary>
-        [JsonPropertyName("salt")]
+        [JsonProperty("salt")]
         public string? Salt { get; set; }
 
-        [JsonPropertyName("entries")]
+        [JsonProperty("entries")]
         public List<WalletEntry> Entries { get; set; } = new();
     }
 }

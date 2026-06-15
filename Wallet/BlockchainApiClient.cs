@@ -15,7 +15,14 @@ namespace SupCore.Wallet
     /// </summary>
     public static class BlockchainApiClient
     {
-        private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
+        private static readonly HttpClient _http = CreateHttpClient();
+
+        private static HttpClient CreateHttpClient()
+        {
+            var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("SupCore/1.0");
+            return client;
+        }
 
         // ── API base URLs ──────────────────────────────────────────────────────────
         private static string BaseUrl(CoinType coin) => coin switch
@@ -65,8 +72,9 @@ namespace SupCore.Wallet
                     using var doc = JsonDocument.Parse(chainJson);
                     status.BestHeight = doc.RootElement.GetProperty("height").GetInt32();
                     string timeStr = doc.RootElement.GetProperty("time").GetString() ?? string.Empty;
-                    status.BestBlockTime = DateTime.Parse(timeStr, null,
-                        System.Globalization.DateTimeStyles.RoundtripKind);
+                    if (DateTime.TryParse(timeStr, null,
+                            System.Globalization.DateTimeStyles.RoundtripKind, out var parsedTime))
+                        status.BestBlockTime = parsedTime.ToUniversalTime();
                     status.IsOnline = true;
                 }
             }

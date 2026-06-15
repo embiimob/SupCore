@@ -268,7 +268,8 @@ namespace SupCore.Forms
                 string address = selectedText.Split(' ')[0];
                 lblBalance.Text = "Balance: loading…";
                 decimal balance = await _walletManager.GetBalanceAsync(coin, address);
-                lblBalance.Text = $"Balance ({address[..8]}…): {balance} {coin.GetShortName()}";
+                string shortAddr = address.Length >= 8 ? address[..8] : address;
+                lblBalance.Text = $"Balance ({shortAddr}…): {balance} {coin.GetShortName()}";
             }
             else
             {
