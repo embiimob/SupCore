@@ -833,7 +833,7 @@ namespace SUP
                                         Directory.CreateDirectory("ipfs/" + transid);
 
                                         try { System.IO.File.Move("ipfs/" + transid + "_tmp", @"ipfs/" + transid + @"/" + fileName); }
-                                        catch (System.ArgumentException ex)
+                                        catch (System.ArgumentException)
                                         {
 
                                             System.IO.File.Move("ipfs/" + transid + "_tmp", "ipfs/" + transid + "/artifact" + activeProfile.Image.Substring(activeProfile.Image.LastIndexOf('.')));
@@ -850,7 +850,7 @@ namespace SUP
                                         if (fileName == "") { fileName = "artifact"; } else { fileName = fileName.Replace(@"/", "").Replace(@"\", ""); }
 
                                         try { System.IO.File.Move("ipfs/" + transid + "/" + transid, @"ipfs/" + transid + @"/" + fileName); }
-                                        catch (System.ArgumentException ex)
+                                        catch (System.ArgumentException)
                                         {
 
                                             System.IO.File.Move("ipfs/" + transid + "/" + transid, "ipfs/" + transid + "/artifact" + activeProfile.Image.Substring(activeProfile.Image.LastIndexOf('.')));
@@ -1123,7 +1123,7 @@ namespace SUP
                 NBitcoin.RPC.RPCClient rpcClient = new NBitcoin.RPC.RPCClient(credentials, new Uri(walletUrl), NBitcoin.Network.Main);
 
 
-                Task.Run(() =>
+                _ = Task.Run(() =>
                 {
                     try
                     {
@@ -1141,7 +1141,7 @@ namespace SUP
 
 
 
-                Task.Run(() =>
+                _ = Task.Run(() =>
                 {
                     try
                     {
@@ -1161,7 +1161,7 @@ namespace SUP
                 });
 
 
-                Task.Run(() =>
+                _ = Task.Run(() =>
                 {
                     try
                     {
@@ -1180,7 +1180,7 @@ namespace SUP
                     catch { }
                 });
 
-                Task.Run(() =>
+                _ = Task.Run(() =>
                 {
                     try
                     {
@@ -1519,7 +1519,7 @@ namespace SUP
                                                             Directory.CreateDirectory("ipfs/" + transid);
 
                                                             try { System.IO.File.Move("ipfs/" + transid + "_tmp", @"ipfs/" + transid + @"/" + fileName); }
-                                                            catch (System.ArgumentException ex)
+                                                            catch (System.ArgumentException)
                                                             {
 
                                                                 System.IO.File.Move("ipfs/" + transid + "_tmp", "ipfs/" + transid + "/artifact" + objstate.Image.Substring(objstate.Image.LastIndexOf('.')));
@@ -1536,7 +1536,7 @@ namespace SUP
                                                             if (fileName == "") { fileName = "artifact"; } else { fileName = fileName.Replace(@"/", "").Replace(@"\", ""); }
 
                                                             try { System.IO.File.Move("ipfs/" + transid + "/" + transid, @"ipfs/" + transid + @"/" + fileName); }
-                                                            catch (System.ArgumentException ex)
+                                                            catch (System.ArgumentException)
                                                             {
 
                                                                 System.IO.File.Move("ipfs/" + transid + "/" + transid, "ipfs/" + transid + "/artifact" + objstate.Image.Substring(objstate.Image.LastIndexOf('.')));
@@ -6816,7 +6816,7 @@ namespace SUP
 
 
 
-                        Task.Run(() =>
+                        _ = Task.Run(() =>
                         {
                             Regex regexTransactionId = new Regex(@"\b[0-9a-f]{64}\b");
                             Match imgurnmatch = regexTransactionId.Match(videolocation);

@@ -51,6 +51,7 @@
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject />
+    <NoWarn>$(NoWarn);NU1608</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="PresentationCore" />
@@ -265,6 +266,29 @@
     <Compile Include="p2fk\classes\Base58.cs" />
     <Compile Include="p2fk\contracts\Root.cs" />
     <Compile Include="p2fk\classes\SHA256.cs" />
+    <Compile Include="Wallet\BlockchainApiClient.cs" />
+    <Compile Include="Wallet\CoinType.cs" />
+    <Compile Include="Wallet\SyncStatus.cs" />
+    <Compile Include="Wallet\WalletEntry.cs" />
+    <Compile Include="Wallet\WalletManager.cs" />
+    <Compile Include="Forms\Connections.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Forms\Connections.Designer.cs">
+      <DependentUpon>Connections.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Forms\WalletWindow.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Forms\WalletWindow.Designer.cs">
+      <DependentUpon>WalletWindow.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Forms\SupMain.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Forms\SupMain.Designer.cs">
+      <DependentUpon>SupMain.cs</DependentUpon>
+    </Compile>
     <EmbeddedResource Include="Connections.resx">
       <DependentUpon>Connections.cs</DependentUpon>
       <SubType>Designer</SubType>
