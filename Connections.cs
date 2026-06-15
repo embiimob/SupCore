@@ -140,7 +140,7 @@ namespace SUP
                 wallet.Open("");
                 return;
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException ex) when (ex.Message.StartsWith("Wrong password"))
             {
                 // Wallet file exists and is encrypted — fall through to password prompt
             }
