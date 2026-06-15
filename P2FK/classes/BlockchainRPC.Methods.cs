@@ -45,6 +45,12 @@ namespace SUP.RPCClient
                 (new RPCRequest("getblockchaininfo", new Object[0]));
         }
 
+        public ChainTxStatsResponse GetChainTxStats()
+        {
+            return RpcCall<ChainTxStatsResponse>
+                (new RPCRequest("getchaintxstats", new Object[0]));
+        }
+
 
     }
     public class GetRawDataTransactionResponse
@@ -106,5 +112,14 @@ namespace SUP.RPCClient
         public double verificationprogress;
         public string bestblockhash;
         public bool initialblockdownload;
+    }
+
+    public class ChainTxStatsResponse
+    {
+        public int time;
+        public long txcount;
+        public int window_final_block_height;
+        public int window_block_count;
+        public long window_tx_count;
     }
 }

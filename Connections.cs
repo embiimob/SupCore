@@ -119,26 +119,46 @@ namespace SUP
         {
             var btn = (Button)sender;
             var id = (CoinNetworkId)btn.Tag;
+            var node = NodeHostManager.GetNode(id);
             var wallet = NodeHostManager.GetWallet(id);
+            var row = _rows[id];
 
-            if (wallet.IsOpen)
+            if (node.IsRunning)
             {
+                try { node.Stop(); }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "Node Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
                 wallet.Lock();
             }
             else
             {
-                OpenWalletWithPrompt(wallet);
+                if (!OpenWalletWithPrompt(wallet))
+                {
+                    UpdateRowStatus(id);
+                    return;
+                }
+
+                try
+                {
+                    node.Start(row.ChkReindex.Checked, row.ChkRescan.Checked);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "Node Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
-            UpdateRowFromWallet(id);
+            UpdateRowStatus(id);
         }
 
-        private static void OpenWalletWithPrompt(WalletManager wallet)
+        private static bool OpenWalletWithPrompt(WalletManager wallet)
         {
             // Try with no password first (new wallets and unencrypted wallets)
             try
             {
                 wallet.Open("");
-                return;
+                return true;
             }
             catch (InvalidOperationException ex) when (ex.Message.StartsWith("Wrong password"))
             {
@@ -147,61 +167,70 @@ namespace SUP
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "Wallet Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
+                return false;
             }
 
             string pass = PromptWalletPassword("Enter wallet password:");
             try
             {
                 wallet.Open(pass);
+                return true;
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "Wallet Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
             }
         }
 
-        private void UpdateRowFromWallet(CoinNetworkId id)
+        private void UpdateRowStatus(CoinNetworkId id)
         {
             if (!_rows.TryGetValue(id, out var row)) return;
             var wallet = NodeHostManager.GetWallet(id);
+            var node = NodeHostManager.GetNode(id);
             if (InvokeRequired)
             {
-                Invoke(new Action(() => ApplyWalletRowState(row, wallet)));
+                Invoke(new Action(() => ApplyCoinRowState(id, row, wallet, node)));
             }
             else
             {
-                ApplyWalletRowState(row, wallet);
+                ApplyCoinRowState(id, row, wallet, node);
             }
         }
 
-        private static void ApplyWalletRowState(CoinStatusRow row, WalletManager wallet)
+        private void ApplyCoinRowState(CoinNetworkId id, CoinStatusRow row, WalletManager wallet, NodeHost node)
         {
-            if (wallet.IsOpen)
+            if (node.IsRunning)
             {
                 row.BtnToggle.Text      = "Stop";
                 row.BtnToggle.BackColor = Color.Blue;
                 row.BtnToggle.ForeColor = Color.Yellow;
-                int addrCount = wallet.GetAddresses().Count;
-                row.LblStatus.Text = "Open";
-                row.Progress.Value = 100;
-                row.LblHeight.Text = addrCount + " addr";
+                row.LblStatus.Text = node.StatusText;
+                int progress = (int)Math.Round(node.SyncPercent);
+                if (progress < 0) progress = 0;
+                if (progress > 100) progress = 100;
+                row.Progress.Value = progress;
+                row.LblHeight.Text = BuildHeightSummary(id, wallet, node);
             }
             else
             {
                 row.BtnToggle.Text      = "Start";
                 row.BtnToggle.BackColor = SystemColors.Control;
                 row.BtnToggle.ForeColor = SystemColors.ControlText;
-                row.LblStatus.Text      = "Stopped";
+                row.LblStatus.Text      = wallet.IsOpen ? "Wallet Open" : "Stopped";
                 row.Progress.Value      = 0;
-                row.LblHeight.Text      = "";
+                row.LblHeight.Text      = wallet.IsOpen
+                    ? wallet.GetAddresses().Count + " addr"
+                    : "";
             }
+            row.BtnToggle.BringToFront();
         }
 
         private void RefreshAllStatus()
         {
+            NodeHostManager.RefreshAll();
             foreach (var cfg in CoinNetworkConfig.All)
-                UpdateRowFromWallet(cfg.Id);
+                UpdateRowStatus(cfg.Id);
         }
 
         private static string PromptWalletPassword(string prompt)
@@ -521,7 +550,7 @@ namespace SUP
             lblChain.AutoSize = true;
             lblChain.Location = new System.Drawing.Point(6, y + 4);
 
-            lblStatus.AutoSize = true;
+            lblStatus.AutoSize = false;
             lblStatus.Location = new System.Drawing.Point(70, y + 4);
             lblStatus.Size     = new System.Drawing.Size(110, 13);
             lblStatus.Text     = "Stopped";
@@ -532,23 +561,23 @@ namespace SUP
             prg.Maximum  = 100;
             prg.Value    = 0;
 
-            lblHeight.AutoSize = true;
+            lblHeight.AutoSize = false;
             lblHeight.Location = new System.Drawing.Point(338, y + 4);
-            lblHeight.Size     = new System.Drawing.Size(100, 13);
+            lblHeight.Size     = new System.Drawing.Size(200, 13);
             lblHeight.Text     = "";
 
             chkRe.Text     = "";
             chkRe.AutoSize = true;
-            chkRe.Location = new System.Drawing.Point(455, y + 2);
+            chkRe.Location = new System.Drawing.Point(545, y + 2);
 
             chkRs.Text     = "";
             chkRs.AutoSize = true;
-            chkRs.Location = new System.Drawing.Point(514, y + 2);
+            chkRs.Location = new System.Drawing.Point(596, y + 2);
 
             btnToggle.Text     = "Start";
             btnToggle.Tag      = id;
-            btnToggle.Location = new System.Drawing.Point(570, y - 1);
-            btnToggle.Size     = new System.Drawing.Size(54, 23);
+            btnToggle.Location = new System.Drawing.Point(640, y - 1);
+            btnToggle.Size     = new System.Drawing.Size(72, 23);
             btnToggle.Click   += new System.EventHandler(this.BtnToggle_Click);
 
             foreach (System.Windows.Forms.Control c in new System.Windows.Forms.Control[] {
@@ -565,6 +594,45 @@ namespace SUP
             lbl.Location = new System.Drawing.Point(x, y);
             lbl.Size     = new System.Drawing.Size(w, h);
             parent.Controls.Add(lbl);
+        }
+
+        private static string BuildHeightSummary(CoinNetworkId id, WalletManager wallet, NodeHost node)
+        {
+            int blocks = Math.Max(0, node.SyncedBlocks);
+            int headers = Math.Max(blocks, node.ChainHeaders);
+            int behind = Math.Max(0, headers - blocks);
+            string summary = string.Format("{0:N0}/{1:N0} blk", blocks, headers);
+
+            if (behind > 0)
+            {
+                double yearsBehind = EstimateYearsBehind(id, behind);
+                summary += string.Format(" • {0:F1}y behind", yearsBehind);
+            }
+
+            if (node.ChainTxCount > 0)
+                summary += string.Format(" • {0:N0} tx", node.ChainTxCount);
+
+            if (wallet.IsOpen)
+                summary += string.Format(" • {0} addr", wallet.GetAddresses().Count);
+
+            return summary;
+        }
+
+        private static double EstimateYearsBehind(CoinNetworkId id, int blocksBehind)
+        {
+            double minutesPerBlock = 10.0;
+            switch (id)
+            {
+                case CoinNetworkId.Litecoin:
+                case CoinNetworkId.Mazacoin:
+                    minutesPerBlock = 2.5;
+                    break;
+                case CoinNetworkId.Dogecoin:
+                    minutesPerBlock = 1.0;
+                    break;
+            }
+
+            return (blocksBehind * minutesPerBlock) / (60.0 * 24.0 * 365.25);
         }
 
         private System.Windows.Forms.Label GetChainLabel(CoinNetworkId id)

@@ -29,6 +29,7 @@ namespace SUP.Wallet
         // ── Status state ───────────────────────────────────────────────────
         public int SyncedBlocks { get; private set; }
         public int ChainHeaders { get; private set; }
+        public long ChainTxCount { get; private set; }
         public double SyncPercent { get; private set; }
         public string StatusText { get; private set; } = "Stopped";
         public bool IsRunning => _process != null && !_process.HasExited;
@@ -79,6 +80,9 @@ namespace SUP.Wallet
                 _process.Exited += (s, e) =>
                 {
                     StatusText = "Stopped";
+                    SyncedBlocks = 0;
+                    ChainHeaders = 0;
+                    ChainTxCount = 0;
                     SyncPercent = 0;
                     StatusChanged?.Invoke(this, EventArgs.Empty);
                 };
@@ -109,6 +113,10 @@ namespace SUP.Wallet
                 try { _process?.WaitForExit(5000); } catch { }
                 try { if (_process != null && !_process.HasExited) _process.Kill(); } catch { }
                 _process = null;
+                SyncedBlocks = 0;
+                ChainHeaders = 0;
+                ChainTxCount = 0;
+                SyncPercent = 0;
                 StatusText = "Stopped";
                 StatusChanged?.Invoke(this, EventArgs.Empty);
             }
@@ -135,6 +143,14 @@ namespace SUP.Wallet
                     var info = rpc.GetBlockchainInfo();
                     SyncedBlocks = info.blocks;
                     ChainHeaders = info.headers;
+                    try
+                    {
+                        ChainTxCount = Math.Max(0L, rpc.GetChainTxStats().txcount);
+                    }
+                    catch
+                    {
+                        ChainTxCount = 0;
+                    }
                     SyncPercent = ChainHeaders > 0
                         ? Math.Min(100.0, info.verificationprogress * 100.0)
                         : 0;
