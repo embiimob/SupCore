@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
@@ -16,6 +17,7 @@ namespace SupCore.Wallet
     public static class BlockchainApiClient
     {
         private static readonly HttpClient _http = CreateHttpClient();
+        private static readonly Dictionary<CoinType, DateTime> _daemonStartAttemptsUtc = new();
 
         private static HttpClient CreateHttpClient()
         {
@@ -23,6 +25,13 @@ namespace SupCore.Wallet
             client.DefaultRequestHeaders.UserAgent.ParseAdd("SupCore/1.0");
             return client;
         }
+
+        private sealed record NodeRpcConfig(
+            int Port,
+            string[] DaemonNames,
+            string[] CookieSuffixes,
+            string[] DaemonArgs,
+            string[] DataDirectories);
 
         // ── API base URLs ──────────────────────────────────────────────────────────
         private static string BaseUrl(CoinType coin) => coin switch
@@ -34,10 +43,173 @@ namespace SupCore.Wallet
             _ => string.Empty
         };
 
+        private static NodeRpcConfig? GetNodeRpcConfig(CoinType coin)
+        {
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+            return coin switch
+            {
+                CoinType.Bitcoin => new NodeRpcConfig(
+                    8332,
+                    new[] { "bitcoind", "bitcoind.exe" },
+                    new[] { ".cookie" },
+                    new[] { "-server", "-rpcbind=127.0.0.1", "-rpcallowip=127.0.0.1" },
+                    new[]
+                    {
+                        Path.Combine(home, ".bitcoin"),
+                        Path.Combine(appData, "Bitcoin")
+                    }),
+                CoinType.BitcoinTestnet => new NodeRpcConfig(
+                    18332,
+                    new[] { "bitcoind", "bitcoind.exe" },
+                    new[] { Path.Combine("testnet4", ".cookie"), Path.Combine("testnet3", ".cookie"), ".cookie" },
+                    new[] { "-server", "-testnet", "-rpcbind=127.0.0.1", "-rpcallowip=127.0.0.1" },
+                    new[]
+                    {
+                        Path.Combine(home, ".bitcoin"),
+                        Path.Combine(appData, "Bitcoin")
+                    }),
+                CoinType.Litecoin => new NodeRpcConfig(
+                    9332,
+                    new[] { "litecoind", "litecoind.exe" },
+                    new[] { ".cookie" },
+                    new[] { "-server", "-rpcbind=127.0.0.1", "-rpcallowip=127.0.0.1" },
+                    new[]
+                    {
+                        Path.Combine(home, ".litecoin"),
+                        Path.Combine(appData, "Litecoin")
+                    }),
+                CoinType.Dogecoin => new NodeRpcConfig(
+                    22555,
+                    new[] { "dogecoind", "dogecoind.exe" },
+                    new[] { ".cookie" },
+                    new[] { "-server", "-rpcbind=127.0.0.1", "-rpcallowip=127.0.0.1" },
+                    new[]
+                    {
+                        Path.Combine(home, ".dogecoin"),
+                        Path.Combine(appData, "Dogecoin")
+                    }),
+                _ => null
+            };
+        }
+
+        public static bool TryStartDaemon(CoinType coin)
+        {
+            var cfg = GetNodeRpcConfig(coin);
+            if (cfg == null) return false;
+
+            if (_daemonStartAttemptsUtc.TryGetValue(coin, out var lastAttempt)
+                && (DateTime.UtcNow - lastAttempt) < TimeSpan.FromSeconds(10))
+                return false;
+
+            _daemonStartAttemptsUtc[coin] = DateTime.UtcNow;
+
+            foreach (var name in cfg.DaemonNames)
+            {
+                try
+                {
+                    var startInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = name,
+                        Arguments = string.Join(" ", cfg.DaemonArgs),
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = false,
+                        RedirectStandardError = false
+                    };
+                    _ = System.Diagnostics.Process.Start(startInfo);
+                    return true;
+                }
+                catch
+                {
+                    // try next candidate executable name
+                }
+            }
+            return false;
+        }
+
+        private static async Task<SyncStatus?> TryGetLocalNodeStatusAsync(CoinType coin)
+        {
+            var cfg = GetNodeRpcConfig(coin);
+            if (cfg == null) return null;
+
+            string? cookie = TryReadCookie(cfg);
+            if (string.IsNullOrWhiteSpace(cookie)) return null;
+            var parts = cookie.Split(':', 2);
+            if (parts.Length != 2) return null;
+
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Post, $"http://127.0.0.1:{cfg.Port}/");
+                string auth = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{parts[0]}:{parts[1]}"));
+                req.Headers.Authorization = new AuthenticationHeaderValue("Basic", auth);
+                req.Content = new StringContent(
+                    "{\"jsonrpc\":\"1.0\",\"id\":\"supcore\",\"method\":\"getblockchaininfo\",\"params\":[]}",
+                    Encoding.UTF8,
+                    "application/json");
+
+                using var res = await _http.SendAsync(req).ConfigureAwait(false);
+                if (!res.IsSuccessStatusCode) return null;
+
+                string json = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Object)
+                    return null;
+
+                var status = new SyncStatus
+                {
+                    Coin = coin,
+                    Source = SyncSource.LocalNode,
+                    IsOnline = true,
+                    BestHeight = result.TryGetProperty("blocks", out var blocks) ? blocks.GetInt32() : 0,
+                    BestHeaderHeight = result.TryGetProperty("headers", out var headers) ? headers.GetInt32() : 0,
+                    VerificationProgress = result.TryGetProperty("verificationprogress", out var verify) ? verify.GetDouble() : null,
+                    IsInitialBlockDownload = result.TryGetProperty("initialblockdownload", out var ibd) ? ibd.GetBoolean() : null
+                };
+
+                if (result.TryGetProperty("mediantime", out var mt) && mt.ValueKind == JsonValueKind.Number)
+                {
+                    long unix = mt.GetInt64();
+                    if (unix > 0)
+                        status.BestBlockTime = DateTimeOffset.FromUnixTimeSeconds(unix).UtcDateTime;
+                }
+                return status;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string? TryReadCookie(NodeRpcConfig cfg)
+        {
+            foreach (string dir in cfg.DataDirectories.Where(Directory.Exists))
+            {
+                foreach (string suffix in cfg.CookieSuffixes)
+                {
+                    string cookiePath = Path.Combine(dir, suffix);
+                    if (!File.Exists(cookiePath)) continue;
+                    try
+                    {
+                        return File.ReadAllText(cookiePath).Trim();
+                    }
+                    catch
+                    {
+                        // ignore and continue
+                    }
+                }
+            }
+            return null;
+        }
+
         // ── Public API ─────────────────────────────────────────────────────────────
 
         public static async Task<SyncStatus> GetSyncStatusAsync(CoinType coin)
         {
+            var local = await TryGetLocalNodeStatusAsync(coin).ConfigureAwait(false);
+            if (local != null) return local;
+
             var status = new SyncStatus { Coin = coin };
             try
             {
@@ -63,6 +235,8 @@ namespace SupCore.Wallet
                     long timestamp = doc.RootElement.GetProperty("timestamp").GetInt64();
                     status.BestBlockTime = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;
                     status.BestHeight = height;
+                    status.BestHeaderHeight = height;
+                    status.Source = SyncSource.RemoteApi;
                     status.IsOnline = true;
                 }
                 else
@@ -75,6 +249,8 @@ namespace SupCore.Wallet
                     if (DateTime.TryParse(timeStr, null,
                             System.Globalization.DateTimeStyles.RoundtripKind, out var parsedTime))
                         status.BestBlockTime = parsedTime.ToUniversalTime();
+                    status.BestHeaderHeight = status.BestHeight;
+                    status.Source = SyncSource.RemoteApi;
                     status.IsOnline = true;
                 }
             }

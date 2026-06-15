@@ -7,11 +7,10 @@ namespace SupCore.Forms
     /// Connections panel – replaces the old bitcoin-qt / dogecoin-qt / litecoin-qt launch buttons
     /// with an internal C# wallet status display.
     ///
-    /// On first open, Bitcoin Testnet is already started (auto-started in Program.cs).
-    /// Other coins are started on-demand by clicking their respective "Start" buttons.
+    /// Coins are connected on-demand by clicking their respective buttons.
     ///
-    /// The panel polls the API every 30 seconds and updates the status labels showing
-    /// online/offline state and how many days behind the chain tip the client is.
+    /// The panel polls every 30 seconds and prefers local node RPC sync data. If no
+    /// local daemon is reachable it falls back to API reachability mode.
     /// </summary>
     public partial class Connections : Form
     {
@@ -67,12 +66,12 @@ namespace SupCore.Forms
             };
             _statusLabels[coin] = lblStatus;
 
-            // Start / Refresh button
+                // Start / Refresh button
             bool isAutoStarted = coin == CoinType.BitcoinTestnet;
             var btnStart = new Button
             {
                 Name = $"btn_{coin}",
-                Text = isAutoStarted ? "Connecting…" : "Connect",
+                    Text = isAutoStarted ? "Connect" : "Connect",
                 Location = new Point(570, y),
                 Width = 100,
                 Height = 26,
@@ -101,13 +100,8 @@ namespace SupCore.Forms
         // ── Event: form loaded ─────────────────────────────────────────────────────
         private async void Connections_Load(object sender, EventArgs e)
         {
-            // Testnet auto-connects on load (it was already started in Program.cs)
-            await RefreshStatusAsync(CoinType.BitcoinTestnet);
-
-            // Check which other coins are already reachable
-            var otherCoins = Enum.GetValues<CoinType>()
-                .Where(c => c != CoinType.BitcoinTestnet);
-            foreach (var coin in otherCoins)
+            // Check which coins are already reachable
+            foreach (var coin in Enum.GetValues<CoinType>())
                 _ = RefreshStatusAsync(coin); // fire-and-forget; update UI when done
         }
 
@@ -120,10 +114,18 @@ namespace SupCore.Forms
                 btn.Text = "Connecting…";
                 btn.BackColor = System.Drawing.Color.LightBlue;
             }
-            await RefreshStatusAsync(coin);
+
+            _ = BlockchainApiClient.TryStartDaemon(coin);
+
+            for (int i = 0; i < 3; i++)
+            {
+                var status = await RefreshStatusAsync(coin);
+                if (status.IsOnline && status.Source == SyncSource.LocalNode) break;
+                await Task.Delay(1200);
+            }
         }
 
-        private async Task RefreshStatusAsync(CoinType coin)
+        private async Task<SyncStatus> RefreshStatusAsync(CoinType coin)
         {
             var status = await BlockchainApiClient.GetSyncStatusAsync(coin).ConfigureAwait(false);
 
@@ -131,6 +133,7 @@ namespace SupCore.Forms
                 Invoke(() => UpdateCoinUI(coin, status));
             else
                 UpdateCoinUI(coin, status);
+            return status;
         }
 
         private async Task RefreshAllStatusAsync()
@@ -158,8 +161,18 @@ namespace SupCore.Forms
             {
                 if (status.IsOnline)
                 {
-                    btn.Text = "Online ✓";
-                    btn.BackColor = System.Drawing.Color.LightGreen;
+                    if (status.Source == SyncSource.LocalNode)
+                    {
+                        btn.Text = status.IsFullySynced ? "Synced ✓" : "Syncing…";
+                        btn.BackColor = status.IsFullySynced
+                            ? System.Drawing.Color.LightGreen
+                            : System.Drawing.Color.Khaki;
+                    }
+                    else
+                    {
+                        btn.Text = "API ✓";
+                        btn.BackColor = System.Drawing.Color.LightYellow;
+                    }
                 }
                 else
                 {
