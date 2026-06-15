@@ -33,8 +33,17 @@ namespace SUP.RPCClient
                 (new RPCRequest("getrawtransaction", new Object[] { txID, Verbose }));
         }
 
+        public string SendRawTransaction(string hexTx)
+        {
+            return RpcCall<string>
+                (new RPCRequest("sendrawtransaction", new Object[] { hexTx }));
+        }
 
-
+        public BlockchainInfoResponse GetBlockchainInfo()
+        {
+            return RpcCall<BlockchainInfoResponse>
+                (new RPCRequest("getblockchaininfo", new Object[0]));
+        }
 
 
     }
@@ -87,5 +96,15 @@ namespace SUP.RPCClient
         {
             return new GetRawDataTransactionResponse() { hex = s };
         }
+    }
+
+    public class BlockchainInfoResponse
+    {
+        public string chain;
+        public int blocks;
+        public int headers;
+        public double verificationprogress;
+        public string bestblockhash;
+        public bool initialblockdownload;
     }
 }
