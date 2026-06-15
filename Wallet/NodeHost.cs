@@ -30,6 +30,7 @@ namespace SUP.Wallet
     public class NodeHost : IDisposable
     {
         private const int MaxPeerConnections = 8;
+        private static readonly TimeSpan HeaderSyncTimeout = TimeSpan.FromMinutes(5);
 
         private readonly object _lock = new object();
         private bool _disposed;
@@ -266,11 +267,25 @@ namespace SUP.Wallet
 
                     try
                     {
-                        // Guard against a stalled peer blocking indefinitely.
+                        // Guard against stalled peers even if the peer ignores cancellation.
                         using (var headerCts = CancellationTokenSource.CreateLinkedTokenSource(token))
                         {
-                            headerCts.CancelAfter(TimeSpan.FromMinutes(5));
-                            peer.SynchronizeSlimChain(_slimChain, null, headerCts.Token);
+                            var headerSyncTask = Task.Run(
+                                () => peer.SynchronizeSlimChain(_slimChain, null, headerCts.Token));
+
+                            bool completed = headerSyncTask.Wait(HeaderSyncTimeout);
+                            if (!completed)
+                            {
+                                WriteLog(
+                                    $"Header sync timed out after {HeaderSyncTimeout.TotalMinutes:0} minutes — disconnecting stalled peer");
+                                try { headerCts.Cancel(); } catch { }
+                                try { peer.Disconnect("Header sync timeout"); } catch { }
+                                Thread.Sleep(3000);
+                                continue;
+                            }
+
+                            // Rethrow any background-sync error using original exception semantics.
+                            headerSyncTask.GetAwaiter().GetResult();
                         }
                     }
                     catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
