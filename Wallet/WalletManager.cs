@@ -45,13 +45,28 @@ namespace SUP.Wallet
             if (WalletStore.Exists(_config.Id))
             {
                 _store = WalletStore.Load(_config.Id, _password);
-                // Decrypt per-entry WIFs into memory
+                // Decrypt per-entry WIFs into memory.
+                // A decryption failure (wrong password) is surfaced immediately rather than silently
+                // skipped, preventing the wallet from appearing open with inaccessible keys.
                 foreach (var entry in _store.Entries)
                 {
                     if (!string.IsNullOrEmpty(entry.EncryptedWif) && !string.IsNullOrEmpty(_password))
-                        try { entry.PrivateKeyWif = WalletStore.DecryptWif(entry.EncryptedWif, _password); } catch { }
+                    {
+                        try
+                        {
+                            entry.PrivateKeyWif = WalletStore.DecryptWif(entry.EncryptedWif, _password);
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new InvalidOperationException(
+                                "Wrong password or corrupted wallet entry for address " + entry.Address, ex);
+                        }
+                    }
                     else if (!string.IsNullOrEmpty(entry.EncryptedWif) && string.IsNullOrEmpty(_password))
-                        entry.PrivateKeyWif = entry.EncryptedWif; // stored unencrypted
+                    {
+                        // Entry was saved without encryption — treat the stored value as plaintext WIF.
+                        entry.PrivateKeyWif = entry.EncryptedWif;
+                    }
                 }
             }
             else
@@ -223,7 +238,10 @@ namespace SUP.Wallet
             if (unspent.Count == 0)
                 throw new InvalidOperationException("No unspent outputs available.");
 
-            // Build transaction — ShuffleRandom = false guarantees output order
+            // Build transaction.
+            // IMPORTANT: ShuffleRandom = false preserves the caller-supplied output order.
+            // The Sup!? state engine encodes semantic meaning into the position of outputs in a
+            // sendmany transaction — shuffling would break state-machine decoding.
             var builder = _config.Network.CreateTransactionBuilder();
             builder.ShuffleRandom = false;
 

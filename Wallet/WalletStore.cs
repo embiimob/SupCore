@@ -20,7 +20,8 @@ namespace SUP.Wallet
     public class WalletStore
     {
         private const string WalletDirectory = "wallet";
-        private const int Pbkdf2Iterations = 100_000;
+        // OWASP 2023 recommendation for PBKDF2-HMAC-SHA256: 600,000 iterations.
+        private const int Pbkdf2Iterations = 600_000;
         private static readonly byte[] Magic = Encoding.ASCII.GetBytes("SUPW");
 
         public string EncryptedMnemonic { get; set; }  // BIP39 mnemonic encrypted with wallet password
@@ -74,8 +75,12 @@ namespace SUP.Wallet
                     bw.Write(Pbkdf2Iterations);
                     bw.Write(ciphertext);
                 }
-                if (File.Exists(path)) File.Delete(path);
-                File.Move(tmp, path);
+                // Atomic replace: move temp file over the target (Windows guarantees this is atomic
+                // when source and destination are on the same volume).
+                if (File.Exists(path))
+                    File.Replace(tmp, path, null);  // atomic on same-volume moves on Windows
+                else
+                    File.Move(tmp, path);
             }
             finally
             {

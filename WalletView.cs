@@ -82,7 +82,9 @@ namespace SUP
             {
                 var item = new ListViewItem(entry.Address);
                 item.SubItems.Add(entry.Label ?? "");
-                item.SubItems.Add(entry.IsHD ? entry.DerivationPath ?? "imported" : "imported");
+                item.SubItems.Add(entry.IsHD
+                    ? (entry.DerivationPath ?? "HD (no path)")
+                    : "imported");
                 lvwAddresses.Items.Add(item);
             }
             lblWalletStatus.Text = $"Wallet open – {wm.GetAddresses().Count} addresses";
