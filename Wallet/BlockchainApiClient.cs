@@ -63,7 +63,7 @@ namespace SupCore.Wallet
                 CoinType.BitcoinTestnet => new NodeRpcConfig(
                     18332,
                     new[] { "bitcoind", "bitcoind.exe" },
-                    new[] { Path.Combine("testnet4", ".cookie"), Path.Combine("testnet3", ".cookie"), ".cookie" },
+                    new[] { Path.Combine("testnet4", ".cookie"), Path.Combine("testnet3", ".cookie") },
                     new[] { "-server", "-testnet", "-rpcbind=127.0.0.1", "-rpcallowip=127.0.0.1" },
                     new[]
                     {

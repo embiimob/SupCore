@@ -67,17 +67,14 @@ namespace SupCore.Forms
             _statusLabels[coin] = lblStatus;
 
                 // Start / Refresh button
-            bool isAutoStarted = coin == CoinType.BitcoinTestnet;
             var btnStart = new Button
             {
-                Name = $"btn_{coin}",
-                    Text = isAutoStarted ? "Connect" : "Connect",
-                Location = new Point(570, y),
-                Width = 100,
-                Height = 26,
-                BackColor = isAutoStarted
-                    ? System.Drawing.Color.LightBlue
-                    : System.Drawing.Color.WhiteSmoke
+                    Name = $"btn_{coin}",
+                    Text = "Connect",
+                    Location = new Point(570, y),
+                    Width = 100,
+                    Height = 26,
+                    BackColor = System.Drawing.Color.WhiteSmoke
             };
             btnStart.Click += async (_, _) => await ConnectCoinAsync(coin);
             _startButtons[coin] = btnStart;

@@ -9,8 +9,8 @@ namespace SupCore.Wallet
 
     /// <summary>
     /// Blockchain synchronisation / connectivity status for a given coin.
-    /// Because SupCore uses API providers rather than running a local full-node,
-    /// "sync" here means "are we connected to the API and how fresh is the tip?"
+    /// SupCore prefers local daemon RPC for real node sync progress and uses remote
+    /// API providers only as a fallback connectivity signal.
     /// </summary>
     public class SyncStatus
     {
