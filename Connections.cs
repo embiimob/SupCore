@@ -47,7 +47,14 @@ namespace SUP
             myTooltip.SetToolTip(btnPurge, "this removes all cached files and configuration data found in the sup root folder");
             myTooltip.SetToolTip(btnPurgeBlock, "this removes the blocks from all blocked transaction ids and addresses.");
             myTooltip.SetToolTip(btnPurgeMute, "this removes all address based muting that is currently ennabled.");
-           
+
+            // RPC server checkboxes: each controls whether -server/-rpcport/-rpcuser/-rpcpassword
+            // are passed to that coin's daemon, making it accessible to the Sup!? CLI.
+            myTooltip.SetToolTip(chkRpcBTCT, "when checked, the bitcoin testnet daemon exposes an RPC server that Sup!? CLI can connect to.");
+            myTooltip.SetToolTip(chkRpcBTC,  "when checked, the bitcoin mainnet daemon exposes an RPC server that Sup!? CLI can connect to.");
+            myTooltip.SetToolTip(chkRpcMZC,  "when checked, the mazacoin daemon exposes an RPC server that Sup!? CLI can connect to.");
+            myTooltip.SetToolTip(chkRpcLTC,  "when checked, the litecoin daemon exposes an RPC server that Sup!? CLI can connect to.");
+            myTooltip.SetToolTip(chkRpcDOG,  "when checked, the dogecoin daemon exposes an RPC server that Sup!? CLI can connect to.");
         }
 
         private void btnMainConnection_Click(object sender, EventArgs e)
@@ -56,6 +63,12 @@ namespace SUP
             string bitcoindPath = AppDomain.CurrentDomain.BaseDirectory + "\\bitcoin-qt.exe";
             System.IO.Directory.CreateDirectory("bitcoin");
 
+            // txindex and addrindex/addressindex are required so that
+            // searchrawtransactions can query all transactions at any address.
+            string args = $"-testnet -txindex=1 -addrindex=1 -addressindex=1 -datadir={bitcoinDirectory}";
+            if (chkRpcBTCT.Checked)
+                args += " -server -rpcuser=good-user -rpcpassword=better-password -rpcport=18332";
+
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 CreateNoWindow = false,
@@ -64,14 +77,14 @@ namespace SUP
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
-                Arguments = $"-testnet -txindex=1 -addrindex=1 -datadir={bitcoinDirectory} -server -rpcuser=good-user -rpcpassword=better-password -rpcport=18332"
-
+                Arguments = args
             };
 
             if (chkBTCT.Checked) { startInfo.Arguments = startInfo.Arguments + " -reindex"; }
             if (chkScanBTCT.Checked) { startInfo.Arguments = startInfo.Arguments + " -rescan"; }
 
             Process.Start(startInfo);
+            SaveChainSession("BTCT", true);
         }
 
         private void btnBTC_Click(object sender, EventArgs e)
@@ -80,6 +93,10 @@ namespace SUP
             string bitcoindPath = AppDomain.CurrentDomain.BaseDirectory + "\\bitcoin-qt.exe";
             System.IO.Directory.CreateDirectory("bitcoin");
 
+            string args = $"-txindex=1 -addrindex=1 -addressindex=1 -datadir={bitcoinDirectory}";
+            if (chkRpcBTC.Checked)
+                args += " -server -rpcuser=good-user -rpcpassword=better-password -rpcport=8332";
+
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 CreateNoWindow = false,
@@ -88,12 +105,13 @@ namespace SUP
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
-                Arguments = $"-txindex=1 -addrindex=1 -datadir={bitcoinDirectory} -server -rpcuser=good-user -rpcpassword=better-password -rpcport=8332"
+                Arguments = args
             };
             if (chkBTC.Checked) { startInfo.Arguments = startInfo.Arguments + " -reindex"; }
             if (chkScanBTC.Checked) { startInfo.Arguments = startInfo.Arguments + " -rescan"; }
 
             Process.Start(startInfo);
+            SaveChainSession("BTC", true);
         }
 
         private void btnMZC_Click(object sender, EventArgs e)
@@ -102,6 +120,10 @@ namespace SUP
             string bitcoindPath = AppDomain.CurrentDomain.BaseDirectory + "\\maza-qt.exe";
             System.IO.Directory.CreateDirectory("mazacoin");
 
+            string args = $"-txindex=1 -addrindex=1 -addressindex=1 -datadir={bitcoinDirectory}";
+            if (chkRpcMZC.Checked)
+                args += " -server -rpcuser=good-user -rpcpassword=better-password -rpcport=12832";
+
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 CreateNoWindow = false,
@@ -110,13 +132,14 @@ namespace SUP
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
-                Arguments = $"-txindex=1 -addrindex=1 -datadir={bitcoinDirectory} -server -rpcuser=good-user -rpcpassword=better-password -rpcport=12832"
+                Arguments = args
             };
 
             if (chkMZC.Checked) { startInfo.Arguments = startInfo.Arguments + " -reindex"; }
             if (chkScanMZC.Checked) { startInfo.Arguments = startInfo.Arguments + " -rescan"; }
 
             Process.Start(startInfo);
+            SaveChainSession("MZC", true);
         }
 
         private void btnLTC_Click(object sender, EventArgs e)
@@ -125,6 +148,10 @@ namespace SUP
             string bitcoindPath = AppDomain.CurrentDomain.BaseDirectory + "\\litecoin-qt.exe";
             System.IO.Directory.CreateDirectory("litecoin");
 
+            string args = $"-txindex=1 -addrindex=1 -addressindex=1 -datadir={bitcoinDirectory}";
+            if (chkRpcLTC.Checked)
+                args += " -server -rpcuser=good-user -rpcpassword=better-password -rpcport=9332";
+
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 CreateNoWindow = false,
@@ -133,13 +160,14 @@ namespace SUP
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
-                Arguments = $"-txindex=1 -addrindex=1 -datadir={bitcoinDirectory} -server -rpcuser=good-user -rpcpassword=better-password -rpcport=9332"
+                Arguments = args
             };
 
             if (chkLTC.Checked) { startInfo.Arguments = startInfo.Arguments + " -reindex"; }
             if (chkScanLTC.Checked) { startInfo.Arguments = startInfo.Arguments + " -rescan"; }
 
             Process.Start(startInfo);
+            SaveChainSession("LTC", true);
         }
 
         private void btnDOGE_Click(object sender, EventArgs e)
@@ -148,6 +176,10 @@ namespace SUP
             string bitcoindPath = AppDomain.CurrentDomain.BaseDirectory + "\\dogecoin-qt.exe";
             System.IO.Directory.CreateDirectory("dogecoin");
 
+            string args = $"-txindex=1 -addrindex=1 -addressindex=1 -datadir={bitcoinDirectory}";
+            if (chkRpcDOG.Checked)
+                args += " -server -rpcuser=good-user -rpcpassword=better-password -rpcport=22555";
+
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 CreateNoWindow = false,
@@ -156,13 +188,14 @@ namespace SUP
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
-                Arguments = $"-txindex=1 -addrindex=1 -datadir={bitcoinDirectory} -server -rpcuser=good-user -rpcpassword=better-password -rpcport=22555"
+                Arguments = args
             };
 
             if (chkDOG.Checked) { startInfo.Arguments = startInfo.Arguments + " -reindex"; }
             if (chkScanDOG.Checked) { startInfo.Arguments = startInfo.Arguments + " -rescan"; }
 
             Process.Start(startInfo);
+            SaveChainSession("DOG", true);
         }
 
         private void Connections_Load(object sender, EventArgs e)
@@ -338,6 +371,94 @@ namespace SUP
                 btnIPFS.BackColor = Color.White;
             }
 
+            // Auto-resume: re-launch any blockchains that were running when SupCore was last closed.
+            // A 1500 ms delay lets the RPC-ping tasks above run first so we don't double-launch
+            // chains that are already running.
+            ResumeChainSession();
+        }
+
+        // ─── Session persistence ────────────────────────────────────────────────────
+
+        private static readonly string SessionFile =
+            System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sup-chains-session.json");
+
+        /// <summary>
+        /// Persist <paramref name="running"/> for <paramref name="chain"/> so it can be
+        /// auto-resumed on the next application start.
+        /// </summary>
+        private void SaveChainSession(string chain, bool running)
+        {
+            try
+            {
+                Dictionary<string, bool> state = LoadSessionState();
+                state[chain] = running;
+                System.IO.File.WriteAllText(SessionFile, Newtonsoft.Json.JsonConvert.SerializeObject(state));
+            }
+            catch { /* non-critical */ }
+        }
+
+        private Dictionary<string, bool> LoadSessionState()
+        {
+            try
+            {
+                if (System.IO.File.Exists(SessionFile))
+                    return Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, bool>>(
+                        System.IO.File.ReadAllText(SessionFile)) ?? new Dictionary<string, bool>();
+            }
+            catch { }
+            return new Dictionary<string, bool>();
+        }
+
+        /// <summary>
+        /// Reads the session file and launches any chains that were active last time.
+        /// Runs after a short delay so that the RPC-ping checks complete first and we
+        /// avoid double-launching chains that are already running.
+        /// </summary>
+        private void ResumeChainSession()
+        {
+            var state = LoadSessionState();
+            if (state.Count == 0) return;
+
+            Task.Delay(1500).ContinueWith(_ =>
+            {
+                this.BeginInvoke(new Action(() =>
+                {
+                    if (state.TryGetValue("BTCT", out bool btct) && btct && btnTMP.Text != "active")
+                        btnMainConnection_Click(null!, EventArgs.Empty);
+
+                    if (state.TryGetValue("BTC", out bool btc) && btc && btnBTC.Text != "active")
+                        btnBTC_Click(null!, EventArgs.Empty);
+
+                    if (state.TryGetValue("MZC", out bool mzc) && mzc && btnMZC.Text != "active")
+                        btnMZC_Click(null!, EventArgs.Empty);
+
+                    if (state.TryGetValue("LTC", out bool ltc) && ltc && btnLTC.Text != "active")
+                        btnLTC_Click(null!, EventArgs.Empty);
+
+                    if (state.TryGetValue("DOG", out bool dog) && dog && btnDOG.Text != "active")
+                        btnDOGE_Click(null!, EventArgs.Empty);
+                }));
+            });
+        }
+
+        /// <summary>
+        /// On close, record which chains are marked active so they auto-resume next time.
+        /// </summary>
+        private void Connections_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            try
+            {
+                var state = new Dictionary<string, bool>
+                {
+                    ["BTCT"] = btnTMP.Text == "active",
+                    ["BTC"]  = btnBTC.Text == "active",
+                    ["MZC"]  = btnMZC.Text == "active",
+                    ["LTC"]  = btnLTC.Text == "active",
+                    ["DOG"]  = btnDOG.Text == "active",
+                };
+                System.IO.File.WriteAllText(SessionFile, Newtonsoft.Json.JsonConvert.SerializeObject(state));
+            }
+            catch { /* non-critical */ }
         }
 
         private void btnIPFS_Click(object sender, EventArgs e)

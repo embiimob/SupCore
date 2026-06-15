@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json.Linq;
 
 namespace SUP.RPCClient
 {
@@ -8,10 +9,22 @@ namespace SUP.RPCClient
 	public partial class CoinRPC
 	{
 	  	    		
-		public string SendMany( string FromAddress, IDictionary<string, decimal> ToBitcoinAddresses)
+		/// <summary>
+		/// Sends a sendmany RPC call.  The outputs are serialised in the exact insertion
+		/// order of <paramref name="ToBitcoinAddresses"/>; no shuffling is applied so
+		/// the output positions remain stable (required by the Sup!? P2FK protocol).
+		/// </summary>
+		public string SendMany(string FromAddress, IEnumerable<KeyValuePair<string, decimal>> ToBitcoinAddresses)
 		{
+			// Build a JObject that preserves the caller's insertion order.
+			// Newtonsoft.Json JObject maintains property insertion order, unlike a plain
+			// Dictionary which offers no serialisation-order guarantee.
+			var amounts = new JObject();
+			foreach (var kv in ToBitcoinAddresses)
+				amounts[kv.Key] = kv.Value;
+
 			return RpcCall<string>
-				(new RPCRequest("sendmany", new Object[] { FromAddress, ToBitcoinAddresses, 0 }));
+				(new RPCRequest("sendmany", new Object[] { FromAddress, amounts, 0 }));
 		}
 
         public string DumpPrivKey(string Address)

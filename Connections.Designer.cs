@@ -107,6 +107,12 @@
             this.txtPort = new System.Windows.Forms.TextBox();
             this.btnTMP = new System.Windows.Forms.Button();
             this.label1 = new System.Windows.Forms.Label();
+            this.lblRpcServer = new System.Windows.Forms.Label();
+            this.chkRpcBTCT = new System.Windows.Forms.CheckBox();
+            this.chkRpcBTC = new System.Windows.Forms.CheckBox();
+            this.chkRpcMZC = new System.Windows.Forms.CheckBox();
+            this.chkRpcLTC = new System.Windows.Forms.CheckBox();
+            this.chkRpcDOG = new System.Windows.Forms.CheckBox();
             this.panel1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             this.SuspendLayout();
@@ -190,6 +196,12 @@
             this.panel1.Controls.Add(this.txtPort);
             this.panel1.Controls.Add(this.btnTMP);
             this.panel1.Controls.Add(this.label1);
+            this.panel1.Controls.Add(this.lblRpcServer);
+            this.panel1.Controls.Add(this.chkRpcBTCT);
+            this.panel1.Controls.Add(this.chkRpcBTC);
+            this.panel1.Controls.Add(this.chkRpcMZC);
+            this.panel1.Controls.Add(this.chkRpcLTC);
+            this.panel1.Controls.Add(this.chkRpcDOG);
             this.panel1.Location = new System.Drawing.Point(9, 3);
             this.panel1.Name = "panel1";
             this.panel1.Size = new System.Drawing.Size(706, 631);
@@ -933,6 +945,76 @@
             this.label1.TabIndex = 50;
             this.label1.Text = "main chain";
             // 
+            // lblRpcServer
+            // 
+            this.lblRpcServer.AutoSize = true;
+            this.lblRpcServer.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.lblRpcServer.Location = new System.Drawing.Point(350, 104);
+            this.lblRpcServer.Name = "lblRpcServer";
+            this.lblRpcServer.Size = new System.Drawing.Size(120, 13);
+            this.lblRpcServer.TabIndex = 180;
+            this.lblRpcServer.Text = "RPC server for CLI";
+            // 
+            // chkRpcBTCT
+            // 
+            this.chkRpcBTCT.AutoSize = true;
+            this.chkRpcBTCT.Checked = true;
+            this.chkRpcBTCT.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.chkRpcBTCT.Location = new System.Drawing.Point(350, 122);
+            this.chkRpcBTCT.Name = "chkRpcBTCT";
+            this.chkRpcBTCT.Size = new System.Drawing.Size(52, 17);
+            this.chkRpcBTCT.TabIndex = 181;
+            this.chkRpcBTCT.Text = "BTCT";
+            this.chkRpcBTCT.UseVisualStyleBackColor = true;
+            // 
+            // chkRpcBTC
+            // 
+            this.chkRpcBTC.AutoSize = true;
+            this.chkRpcBTC.Checked = true;
+            this.chkRpcBTC.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.chkRpcBTC.Location = new System.Drawing.Point(350, 142);
+            this.chkRpcBTC.Name = "chkRpcBTC";
+            this.chkRpcBTC.Size = new System.Drawing.Size(46, 17);
+            this.chkRpcBTC.TabIndex = 182;
+            this.chkRpcBTC.Text = "BTC";
+            this.chkRpcBTC.UseVisualStyleBackColor = true;
+            // 
+            // chkRpcMZC
+            // 
+            this.chkRpcMZC.AutoSize = true;
+            this.chkRpcMZC.Checked = true;
+            this.chkRpcMZC.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.chkRpcMZC.Location = new System.Drawing.Point(350, 162);
+            this.chkRpcMZC.Name = "chkRpcMZC";
+            this.chkRpcMZC.Size = new System.Drawing.Size(50, 17);
+            this.chkRpcMZC.TabIndex = 183;
+            this.chkRpcMZC.Text = "MZC";
+            this.chkRpcMZC.UseVisualStyleBackColor = true;
+            // 
+            // chkRpcLTC
+            // 
+            this.chkRpcLTC.AutoSize = true;
+            this.chkRpcLTC.Checked = true;
+            this.chkRpcLTC.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.chkRpcLTC.Location = new System.Drawing.Point(350, 182);
+            this.chkRpcLTC.Name = "chkRpcLTC";
+            this.chkRpcLTC.Size = new System.Drawing.Size(44, 17);
+            this.chkRpcLTC.TabIndex = 184;
+            this.chkRpcLTC.Text = "LTC";
+            this.chkRpcLTC.UseVisualStyleBackColor = true;
+            // 
+            // chkRpcDOG
+            // 
+            this.chkRpcDOG.AutoSize = true;
+            this.chkRpcDOG.Checked = true;
+            this.chkRpcDOG.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.chkRpcDOG.Location = new System.Drawing.Point(350, 202);
+            this.chkRpcDOG.Name = "chkRpcDOG";
+            this.chkRpcDOG.Size = new System.Drawing.Size(51, 17);
+            this.chkRpcDOG.TabIndex = 185;
+            this.chkRpcDOG.Text = "DOGE";
+            this.chkRpcDOG.UseVisualStyleBackColor = true;
+            // 
             // Connections
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -945,6 +1027,7 @@
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Connections";
             this.Load += new System.EventHandler(this.Connections_Load);
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.Connections_FormClosing);
             this.panel1.ResumeLayout(false);
             this.panel1.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
@@ -1032,5 +1115,11 @@
         private System.Windows.Forms.CheckBox chkScanMZC;
         private System.Windows.Forms.CheckBox chkScanBTC;
         private System.Windows.Forms.CheckBox chkScanBTCT;
+        private System.Windows.Forms.Label lblRpcServer;
+        private System.Windows.Forms.CheckBox chkRpcBTCT;
+        private System.Windows.Forms.CheckBox chkRpcBTC;
+        private System.Windows.Forms.CheckBox chkRpcMZC;
+        private System.Windows.Forms.CheckBox chkRpcLTC;
+        private System.Windows.Forms.CheckBox chkRpcDOG;
     }
 }
