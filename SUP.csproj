@@ -108,6 +108,7 @@
     <Compile Include="Wallet\CoinNetwork.cs" />
     <Compile Include="Wallet\WalletEntry.cs" />
     <Compile Include="Wallet\WalletStore.cs" />
+    <Compile Include="Wallet\AddressIndex.cs" />
     <Compile Include="Wallet\WalletManager.cs" />
     <Compile Include="Wallet\NodeHost.cs" />
     <Compile Include="Wallet\NodeHostManager.cs" />

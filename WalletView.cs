@@ -57,12 +57,37 @@ namespace SUP
         private void UpdateStatusTab()
         {
             var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"{"Network",-24} {"Node",-28} {"Blocks",-22} {"Wallet"}");
+            sb.AppendLine(new string('─', 100));
             foreach (var cfg in CoinNetworkConfig.All)
             {
                 var wallet = NodeHostManager.GetWallet(cfg.Id);
-                string status = wallet.IsOpen ? "Open" : "Stopped";
-                int addrCount = wallet.IsOpen ? wallet.GetAddresses().Count : 0;
-                sb.AppendLine($"{cfg.DisplayName,-22} {status,-22} {addrCount} addr");
+                var node   = NodeHostManager.GetNode(cfg.Id);
+
+                string nodeStatus;
+                string blockInfo;
+                if (node.IsRunning)
+                {
+                    nodeStatus = node.StatusText?.Length > 26
+                        ? node.StatusText.Substring(0, 26)
+                        : (node.StatusText ?? "Running");
+                    blockInfo = node.ChainHeaders > 0
+                        ? $"{node.SyncedBlocks}/{node.ChainHeaders} ({node.SyncPercent:F1}%)"
+                        : node.SyncedBlocks > 0
+                            ? $"{node.SyncedBlocks} blocks"
+                            : "—";
+                }
+                else
+                {
+                    nodeStatus = "Stopped";
+                    blockInfo  = "—";
+                }
+
+                string walletStatus = wallet.IsOpen
+                    ? $"Open ({wallet.GetAddresses().Count} addr)"
+                    : "Closed";
+
+                sb.AppendLine($"{cfg.DisplayName,-24} {nodeStatus,-28} {blockInfo,-22} {walletStatus}");
             }
             txtSyncStatus.Text = sb.ToString();
         }
@@ -232,6 +257,14 @@ namespace SUP
                 lblSecurityStatus.Text = "Wallet open";
                 RefreshAddresses();
                 RefreshReceive();
+
+                // Auto-start the embedded node so sync begins immediately.
+                var node = NodeHostManager.GetNode(_activeNetwork);
+                if (!node.IsRunning)
+                {
+                    node.Start();
+                    RefreshStatus();
+                }
             }
             catch (Exception ex)
             {

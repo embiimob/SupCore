@@ -144,9 +144,21 @@ namespace SUP.Wallet
                     int verbose = @params.Count > 1 ? @params[1].Value<int>() : 0;
                     int skip = @params.Count > 2 ? @params[2].Value<int>() : 0;
                     int qty = @params.Count > 3 ? @params[3].Value<int>() : 100;
+
+                    // Use the embedded index when the node is running
+                    var node = NodeHostManager.GetNode(cfg.Id);
+                    var idx  = node?.GetAddressIndex();
+                    if (idx != null)
+                    {
+                        idx.WatchAddress(address); // ensure this address is tracked going forward
+                        var txs = idx.GetTransactions(address, skip, qty);
+                        return OkResponse(JToken.FromObject(txs), id);
+                    }
+
+                    // Fallback to external RPC
                     var rpc = MakeRpc(cfg);
-                    var txs = rpc.SearchRawDataTransaction(address, verbose, skip, qty);
-                    return OkResponse(JToken.FromObject(txs ?? new List<GetRawDataTransactionResponse>()), id);
+                    var rpcTxs = rpc.SearchRawDataTransaction(address, verbose, skip, qty);
+                    return OkResponse(JToken.FromObject(rpcTxs ?? new List<GetRawDataTransactionResponse>()), id);
                 }
                 case "getrawtransaction":
                 {
@@ -196,9 +208,24 @@ namespace SUP.Wallet
                 }
                 case "getblockchaininfo":
                 {
-                    var rpc = MakeRpc(cfg);
-                    var info = rpc.GetBlockchainInfo();
-                    return OkResponse(JToken.FromObject(info), id);
+                    // Return embedded node status when running; fall back to external RPC
+                    var node = NodeHostManager.GetNode(cfg.Id);
+                    if (node != null && node.IsRunning)
+                    {
+                        var info = new BlockchainInfoResponse
+                        {
+                            chain                = cfg.IsTestNet ? "test" : "main",
+                            blocks               = node.SyncedBlocks,
+                            headers              = node.ChainHeaders,
+                            verificationprogress = node.SyncPercent / 100.0,
+                            bestblockhash        = string.Empty,
+                            initialblockdownload = node.SyncPercent < 99.99
+                        };
+                        return OkResponse(JToken.FromObject(info), id);
+                    }
+                    var rpc2 = MakeRpc(cfg);
+                    var info2 = rpc2.GetBlockchainInfo();
+                    return OkResponse(JToken.FromObject(info2), id);
                 }
                 case "stop":
                 {
@@ -209,9 +236,20 @@ namespace SUP.Wallet
                 case "sendrawtransaction":
                 {
                     string hex = @params.Count > 0 ? @params[0].Value<string>() : null;
-                    var rpc = MakeRpc(cfg);
-                    string txid = rpc.SendRawTransaction(hex);
-                    return OkResponse(JToken.FromObject(txid), id);
+                    // Prefer broadcasting via the embedded P2P node
+                    var nodeForBcast = NodeHostManager.GetNode(cfg.Id);
+                    if (nodeForBcast != null && nodeForBcast.IsRunning)
+                    {
+                        var tx = NBitcoin.Transaction.Parse(hex, cfg.Network);
+                        bool ok = nodeForBcast.BroadcastAsync(tx).GetAwaiter().GetResult();
+                        if (!ok)
+                            throw new InvalidOperationException(
+                                "Embedded node failed to broadcast transaction.");
+                        return OkResponse(JToken.FromObject(tx.GetHash().ToString()), id);
+                    }
+                    var rpc3 = MakeRpc(cfg);
+                    string txid3 = rpc3.SendRawTransaction(hex);
+                    return OkResponse(JToken.FromObject(txid3), id);
                 }
                 default:
                 {

@@ -81,6 +81,10 @@ namespace SUP.Wallet
                 Save();
             }
             _locked = false;
+
+            // Register all wallet addresses with the embedded node's address index
+            // so that sync will capture their transactions.
+            RegisterAddressesWithIndex();
         }
 
         /// <summary>
@@ -142,6 +146,7 @@ namespace SUP.Wallet
             };
             _store.Entries.Add(entry);
             Save();
+            WatchAddressInIndex(addr);
             return entry;
         }
 
@@ -166,6 +171,7 @@ namespace SUP.Wallet
             };
             _store.Entries.Add(entry);
             Save();
+            WatchAddressInIndex(addr);
             return entry;
         }
 
@@ -232,9 +238,8 @@ namespace SUP.Wallet
             var secret = new BitcoinSecret(fundingEntry.PrivateKeyWif, _config.Network);
             var changeAddress = secret.GetAddress(ScriptPubKeyType.Legacy);
 
-            // Get UTXOs from local node
-            var rpc = new CoinRPC(new Uri(_config.RpcUrl), new NetworkCredential(RpcUser, RpcPassword));
-            var unspent = GetUnspentOutputs(rpc, fundingEntry.Address);
+            // Get UTXOs — prefer embedded index, fall back to external RPC
+            List<Coin> unspent = GetUnspentOutputs(fundingEntry.Address);
             if (unspent.Count == 0)
                 throw new InvalidOperationException("No unspent outputs available.");
 
@@ -260,49 +265,83 @@ namespace SUP.Wallet
             builder.SendFees(Money.Coins(feeRate));
 
             var tx = builder.BuildTransaction(sign: true);
-            var hex = tx.ToHex();
 
-            // Broadcast via local node
-            rpc.SendRawTransaction(hex);
+            // Broadcast — prefer embedded P2P, fall back to external RPC
+            var node = NodeHostManager.GetNode(_config.Id);
+            if (node != null && node.IsRunning)
+            {
+                bool ok = node.BroadcastAsync(tx).GetAwaiter().GetResult();
+                if (!ok)
+                    throw new InvalidOperationException(
+                        "Failed to broadcast transaction via the embedded P2P node.");
+            }
+            else
+            {
+                var rpc = new CoinRPC(new Uri(_config.RpcUrl),
+                    new NetworkCredential(RpcUser, RpcPassword));
+                rpc.SendRawTransaction(tx.ToHex());
+            }
+
             return tx.GetHash().ToString();
         }
 
         // ── Balance ────────────────────────────────────────────────────────
 
-        /// <summary>Query the confirmed balance for a given address from the local node.</summary>
+        /// <summary>
+        /// Query the confirmed balance for a given address.
+        /// Uses the embedded address index when the local node is running;
+        /// otherwise falls back to external RPC.
+        /// </summary>
         public decimal GetBalance(string address)
         {
             try
             {
-                var rpc = new CoinRPC(new Uri(_config.RpcUrl), new NetworkCredential(RpcUser, RpcPassword));
-                var results = rpc.SearchRawDataTransaction(address, 1, 0, 1000);
-                if (results == null || results.Count == 0) return 0m;
-
-                // Sum outputs to this address, subtract inputs spent from this address
-                decimal balance = 0m;
-                var spent = new System.Collections.Generic.HashSet<string>();
-
-                foreach (var tx in results)
+                // Try embedded index first
+                var node = NodeHostManager.GetNode(_config.Id);
+                var idx  = node?.GetAddressIndex();
+                if (idx != null)
                 {
-                    if (tx.vin != null)
-                        foreach (var inp in tx.vin)
-                            if (!string.IsNullOrEmpty(inp.txid))
-                                spent.Add(inp.txid + ":" + inp.vout);
-
-                    if (tx.vout != null)
-                        foreach (var out_ in tx.vout)
-                            if (out_.scriptPubKey?.addresses != null &&
-                                out_.scriptPubKey.addresses.Any(a =>
-                                    string.Equals(a, address, StringComparison.OrdinalIgnoreCase)))
-                            {
-                                string key = tx.txid + ":" + out_.n;
-                                if (!spent.Contains(key))
-                                    balance += out_.value;
-                            }
+                    var results = idx.GetTransactions(address, 0, 10000);
+                    return ComputeBalance(address, results);
                 }
-                return balance;
+
+                // Fallback to external RPC
+                var rpc = new CoinRPC(new Uri(_config.RpcUrl),
+                    new NetworkCredential(RpcUser, RpcPassword));
+                var rpcResults = rpc.SearchRawDataTransaction(address, 1, 0, 1000);
+                return ComputeBalance(address, rpcResults);
             }
             catch { return 0m; }
+        }
+
+        private static decimal ComputeBalance(
+            string address,
+            IList<SUP.RPCClient.GetRawDataTransactionResponse> txs)
+        {
+            if (txs == null || txs.Count == 0) return 0m;
+
+            decimal balance = 0m;
+            var spent = new System.Collections.Generic.HashSet<string>();
+
+            foreach (var tx in txs)
+            {
+                if (tx.vin != null)
+                    foreach (var inp in tx.vin)
+                        if (!string.IsNullOrEmpty(inp.txid))
+                            spent.Add(inp.txid + ":" + inp.vout);
+
+                if (tx.vout != null)
+                    foreach (var out_ in tx.vout)
+                        if (out_.scriptPubKey?.addresses != null &&
+                            out_.scriptPubKey.addresses.Any(a =>
+                                string.Equals(a, address, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            string key = tx.txid + ":" + out_.n;
+                            if (!spent.Contains(key))
+                                balance += out_.value;
+                        }
+            }
+            return balance;
         }
 
         // ── Helpers ────────────────────────────────────────────────────────
@@ -356,40 +395,81 @@ namespace SUP.Wallet
 
         private void Save() => _store.Save(_config.Id, _password ?? string.Empty);
 
-        /// <summary>Get unspent outputs for an address by scanning searchrawtransactions.</summary>
-        private List<Coin> GetUnspentOutputs(CoinRPC rpc, string address)
+        /// <summary>
+        /// Register all wallet addresses with the embedded node's address index
+        /// so that the sync captures their transactions.
+        /// </summary>
+        private void RegisterAddressesWithIndex()
         {
-            var coins = new List<Coin>();
+            if (_store == null) return;
+            var node = NodeHostManager.GetNode(_config.Id);
+            var idx = node?.GetAddressIndex();
+            if (idx == null) return;
+            foreach (var entry in _store.Entries)
+                idx.WatchAddress(entry.Address);
+        }
+
+        /// <summary>Register a single address with the embedded node's address index.</summary>
+        private void WatchAddressInIndex(string address)
+        {
+            var node = NodeHostManager.GetNode(_config.Id);
+            node?.GetAddressIndex()?.WatchAddress(address);
+        }
+
+        /// <summary>
+        /// Get unspent outputs for an address.
+        /// Uses the embedded address index when available; falls back to external RPC.
+        /// </summary>
+        private List<Coin> GetUnspentOutputs(string address)
+        {
+            // Try embedded index first
+            var node = NodeHostManager.GetNode(_config.Id);
+            var idx  = node?.GetAddressIndex();
+            if (idx != null)
+                return BuildCoinsFromIndex(address, idx.GetTransactions(address, 0, 10000));
+
+            // Fallback to external RPC
             try
             {
-                var txs = rpc.SearchRawDataTransaction(address, 1, 0, 1000);
-                if (txs == null) return coins;
+                var rpc = new CoinRPC(new Uri(_config.RpcUrl),
+                    new NetworkCredential(RpcUser, RpcPassword));
+                return BuildCoinsFromIndex(address, rpc.SearchRawDataTransaction(address, 1, 0, 1000));
+            }
+            catch { return new List<Coin>(); }
+        }
 
-                var spentKeys = new System.Collections.Generic.HashSet<string>();
-                foreach (var tx in txs)
-                    if (tx.vin != null)
-                        foreach (var inp in tx.vin)
-                            if (!string.IsNullOrEmpty(inp.txid))
-                                spentKeys.Add(inp.txid + ":" + inp.vout);
+        private List<Coin> BuildCoinsFromIndex(
+            string address,
+            IList<SUP.RPCClient.GetRawDataTransactionResponse> txs)
+        {
+            var coins = new List<Coin>();
+            if (txs == null || txs.Count == 0) return coins;
 
-                foreach (var tx in txs)
+            var spentKeys = new System.Collections.Generic.HashSet<string>();
+            foreach (var tx in txs)
+                if (tx.vin != null)
+                    foreach (var inp in tx.vin)
+                        if (!string.IsNullOrEmpty(inp.txid))
+                            spentKeys.Add(inp.txid + ":" + inp.vout);
+
+            foreach (var tx in txs)
+            {
+                if (tx.vout == null || string.IsNullOrEmpty(tx.txid)) continue;
+                foreach (var out_ in tx.vout)
                 {
-                    if (tx.vout == null || string.IsNullOrEmpty(tx.txid)) continue;
-                    foreach (var out_ in tx.vout)
-                    {
-                        if (out_.scriptPubKey?.addresses == null) continue;
-                        if (!out_.scriptPubKey.addresses.Any(a =>
-                            string.Equals(a, address, StringComparison.OrdinalIgnoreCase))) continue;
-                        string key = tx.txid + ":" + out_.n;
-                        if (spentKeys.Contains(key)) continue;
-                        var outPoint = new OutPoint(uint256.Parse(tx.txid), (uint)out_.n);
-                        var txOut = new TxOut(Money.Coins(out_.value),
-                            BitcoinAddress.Create(address, _config.Network).ScriptPubKey);
-                        coins.Add(new Coin(outPoint, txOut));
-                    }
+                    if (out_.scriptPubKey?.addresses == null) continue;
+                    if (!out_.scriptPubKey.addresses.Any(a =>
+                            string.Equals(a, address, StringComparison.OrdinalIgnoreCase)))
+                        continue;
+                    string key = tx.txid + ":" + out_.n;
+                    if (spentKeys.Contains(key)) continue;
+                    var outPoint = new OutPoint(uint256.Parse(tx.txid), (uint)out_.n);
+                    var txOut = new TxOut(
+                        Money.Coins(out_.value),
+                        BitcoinAddress.Create(address, _config.Network).ScriptPubKey);
+                    coins.Add(new Coin(outPoint, txOut));
                 }
             }
-            catch { }
             return coins;
         }
     }

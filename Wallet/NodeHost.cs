@@ -1,206 +1,455 @@
 using System;
-using System.Diagnostics;
+using System.Collections.Generic;
 using System.IO;
-using System.Net;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using SUP.RPCClient;
+using NBitcoin;
+using NBitcoin.Protocol;
+using NBitcoin.Protocol.Behaviors;
 
 namespace SUP.Wallet
 {
     /// <summary>
-    /// Manages the lifecycle of a single blockchain daemon process
-    /// (bitcoind / litecoind / dogecoind / mazad — no Qt required).
+    /// Fully embedded C# Bitcoin P2P node — no external daemon process required.
+    /// Connects directly to the Bitcoin P2P network using NBitcoin.Protocol,
+    /// downloads block headers and full blocks, and maintains an address-indexed
+    /// transaction store on disk under the configured data directory.
     ///
-    /// The daemon is launched with -txindex=1 -addrindex=1 -server so that
-    /// searchrawtransactions is available to the rest of the application.
+    /// Files created in &lt;dataDirectory&gt;/:
+    ///   node.info       — startup information (visible immediately on Start)
+    ///   peers.dat       — serialised AddressManager (known peers)
+    ///   headers.dat     — serialised SlimChain (block header hashes + heights)
+    ///   sync.log        — human-readable sync progress log
+    ///   index/          — per-address transaction index (.json per address)
+    ///
+    /// Bitcoin mainnet and testnet are supported.  Litecoin, Dogecoin and Mazacoin
+    /// require their altcoin network definitions to be registered with NBitcoin
+    /// before P2P sync can be activated; wallet key operations still work for them.
     /// </summary>
     public class NodeHost : IDisposable
     {
-        private const string RpcUser = "good-user";
-        private const string RpcPassword = "better-password";
+        private const int MaxPeerConnections = 8;
 
-        private Process _process;
         private readonly object _lock = new object();
         private bool _disposed;
 
+        // ── Status (same public interface as the previous process-launcher) ──
         public CoinNetworkConfig Config { get; }
-
-        // ── Status state ───────────────────────────────────────────────────
         public int SyncedBlocks { get; private set; }
         public int ChainHeaders { get; private set; }
         public long ChainTxCount { get; private set; }
         public double SyncPercent { get; private set; }
         public string StatusText { get; private set; } = "Stopped";
-        public bool IsRunning => _process != null && !_process.HasExited;
+        public bool IsRunning { get; private set; }
 
-        // Fired whenever status properties change
+        /// <summary>Fired whenever any status property changes.</summary>
         public event EventHandler StatusChanged;
+
+        // ── P2P components ──────────────────────────────────────────────────
+        private NodesGroup _group;
+        private SlimChain _slimChain;
+        private AddressManager _addressManager;
+        private BroadcastHub _broadcastHub;
+        private CancellationTokenSource _cts;
+        private Task _syncTask;
+
+        // ── Address index ───────────────────────────────────────────────────
+        // Always present (even when node is stopped) so wallets can read
+        // previously indexed transactions without restarting the sync.
+        private readonly AddressIndex _addressIndex;
+
+        /// <summary>Returns the address-indexed transaction store for this network.</summary>
+        public AddressIndex GetAddressIndex() => _addressIndex;
+
+        // ── Data directory ──────────────────────────────────────────────────
+        private readonly string _dataDir;
+        private string PeersFile   => Path.Combine(_dataDir, "peers.dat");
+        private string HeadersFile => Path.Combine(_dataDir, "headers.dat");
 
         public NodeHost(CoinNetworkConfig config)
         {
             Config = config;
+            _dataDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, config.DataDirectory);
+            string indexDir = Path.Combine(_dataDir, "index");
+            _addressIndex = new AddressIndex(indexDir, config);
         }
 
-        // ── Launch / Stop ──────────────────────────────────────────────────
+        // ── Start / Stop ────────────────────────────────────────────────────
 
-        /// <summary>Start the daemon.  Has no effect if already running.</summary>
+        /// <summary>Start the embedded P2P node.  Has no effect if already running.</summary>
         public void Start(bool reindex = false, bool rescan = false)
         {
             lock (_lock)
             {
                 if (IsRunning) return;
 
-                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string dataDir = Path.Combine(baseDir, Config.DataDirectory);
-                Directory.CreateDirectory(dataDir);
-                string daemonPath = ResolveExecutablePath(baseDir);
-
-                if (string.IsNullOrEmpty(daemonPath))
+                // Bitcoin mainnet and testnet are natively supported by NBitcoin.Protocol.
+                // Altcoins need their network registered first; until then we show a clear
+                // status message but do not prevent wallet key operations.
+                if (Config.Id != CoinNetworkId.BitcoinMainnet &&
+                    Config.Id != CoinNetworkId.BitcoinTestnet)
                 {
-                    StatusText = BuildExecutableNotFoundMessage(baseDir);
+                    StatusText = $"Embedded P2P sync not yet supported for {Config.DisplayName}. " +
+                                  "Wallet key operations are available.";
                     StatusChanged?.Invoke(this, EventArgs.Empty);
                     return;
                 }
 
-                string args = BuildArgs(dataDir, reindex, rescan);
-
-                var psi = new ProcessStartInfo
+                try
                 {
-                    FileName = daemonPath,
-                    Arguments = args,
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                };
+                    // ── Prepare directories ─────────────────────────────────
+                    Directory.CreateDirectory(_dataDir);
+                    string indexDir = Path.Combine(_dataDir, "index");
+                    Directory.CreateDirectory(indexDir);
 
-                _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-                _process.Exited += (s, e) =>
-                {
-                    StatusText = "Stopped";
-                    SyncedBlocks = 0;
-                    ChainHeaders = 0;
-                    ChainTxCount = 0;
-                    SyncPercent = 0;
+                    // Write a visible marker immediately so the user can see the node started.
+                    File.WriteAllText(
+                        Path.Combine(_dataDir, "node.info"),
+                        $"SUP EmbeddedNode\r\nNetwork : {Config.DisplayName}\r\nStarted : {DateTime.UtcNow:u}\r\n");
+
+                    if (reindex)
+                    {
+                        if (File.Exists(HeadersFile)) File.Delete(HeadersFile);
+                        foreach (string f in Directory.GetFiles(indexDir))
+                            try { File.Delete(f); } catch { }
+                    }
+
+                    _cts = new CancellationTokenSource();
+
+                    // ── SlimChain (header tracking) ─────────────────────────
+                    _slimChain = new SlimChain(Config.Network.GenesisHash);
+                    if (!reindex && File.Exists(HeadersFile))
+                    {
+                        try
+                        {
+                            using (var fs = File.OpenRead(HeadersFile))
+                                _slimChain.Load(fs);
+                            WriteLog($"Resumed from block header {_slimChain.Height}");
+                        }
+                        catch (Exception ex)
+                        {
+                            WriteLog("Could not load headers.dat (" + ex.Message + ") — starting from genesis");
+                        }
+                    }
+
+                    // ── AddressManager (peer discovery) ─────────────────────
+                    _addressManager = File.Exists(PeersFile)
+                        ? AddressManager.LoadPeerFile(PeersFile, Config.Network)
+                        : new AddressManager();
+
+                    // ── Address index ───────────────────────────────────────
+                    if (!reindex && !rescan)
+                        _addressIndex.LoadFromDisk();
+                    else if (rescan)
+                        _addressIndex.Reset();
+
+                    // ── NodesGroup + behaviors ──────────────────────────────
+                    var parameters = new NodeConnectionParameters();
+                    parameters.UserAgent = "/SUP:1.0/";
+
+                    parameters.TemplateBehaviors.Add(
+                        new AddressManagerBehavior(_addressManager)
+                        {
+                            Mode = AddressManagerBehaviorMode.AdvertizeDiscover
+                        });
+                    parameters.TemplateBehaviors.Add(new SlimChainBehavior(_slimChain));
+
+                    _broadcastHub = new BroadcastHub();
+                    parameters.TemplateBehaviors.Add(_broadcastHub.CreateBehavior());
+
+                    _group = new NodesGroup(
+                        Config.Network,
+                        parameters,
+                        new NodeRequirement { RequiredServices = NodeServices.Network })
+                    {
+                        MaximumNodeConnection = MaxPeerConnections
+                    };
+                    _group.Connect();
+
+                    IsRunning = true;
+                    StatusText = "Connecting…";
                     StatusChanged?.Invoke(this, EventArgs.Empty);
-                };
-                _process.Start();
-                _process.BeginOutputReadLine();
-                _process.BeginErrorReadLine();
 
-                StatusText = "Starting…";
-                StatusChanged?.Invoke(this, EventArgs.Empty);
+                    // ── Background sync task ────────────────────────────────
+                    var token = _cts.Token;
+                    _syncTask = Task.Run(() => SyncLoop(token), token);
+                }
+                catch (Exception ex)
+                {
+                    StatusText = "Start failed: " + ex.Message;
+                    IsRunning = false;
+                    try { _cts?.Cancel(); } catch { }
+                    StatusChanged?.Invoke(this, EventArgs.Empty);
+                }
             }
         }
 
-        /// <summary>Send RPC stop command; if that fails, kill the process.</summary>
+        /// <summary>Stop the embedded node and persist state to disk.</summary>
         public void Stop()
         {
             lock (_lock)
             {
                 if (!IsRunning) return;
-                try
-                {
-                    var rpc = new CoinRPC(new Uri(Config.RpcUrl),
-                        new NetworkCredential(RpcUser, RpcPassword));
-                    rpc.HttpCall(Newtonsoft.Json.JsonConvert.SerializeObject(
-                        new { method = "stop", @params = new object[0], id = 1 }));
-                }
-                catch { }
+                IsRunning = false;
 
-                try { _process?.WaitForExit(5000); } catch { }
-                try { if (_process != null && !_process.HasExited) _process.Kill(); } catch { }
-                _process = null;
+                try { _cts?.Cancel(); } catch { }
+                try { _syncTask?.Wait(8000); } catch { }
+                try { _group?.Disconnect(); } catch { }
+
+                PersistState();
+
+                _group        = null;
+                _slimChain    = null;
+                _addressManager = null;
+                _broadcastHub = null;
+                _cts          = null;
+
                 SyncedBlocks = 0;
                 ChainHeaders = 0;
                 ChainTxCount = 0;
-                SyncPercent = 0;
-                StatusText = "Stopped";
+                SyncPercent  = 0;
+                StatusText   = "Stopped";
                 StatusChanged?.Invoke(this, EventArgs.Empty);
             }
         }
 
         /// <summary>
-        /// Poll the daemon via RPC and refresh status properties.
-        /// Called periodically from the UI timer.
+        /// Fire the StatusChanged event so the UI re-reads the current status properties.
+        /// The background sync loop updates the properties continuously; this method
+        /// just triggers the notification.
         /// </summary>
         public void RefreshStatus()
         {
-            if (!IsRunning)
+            if (IsRunning)
+                StatusChanged?.Invoke(this, EventArgs.Empty);
+            else if (StatusText != "Stopped")
             {
-                if (StatusText != "Stopped") { StatusText = "Stopped"; StatusChanged?.Invoke(this, EventArgs.Empty); }
-                return;
+                StatusText = "Stopped";
+                StatusChanged?.Invoke(this, EventArgs.Empty);
             }
+        }
 
-            Task.Run(() =>
+        // ── Broadcast ────────────────────────────────────────────────────────
+
+        /// <summary>Broadcast a signed transaction to the connected peers.</summary>
+        public async Task<bool> BroadcastAsync(Transaction tx)
+        {
+            if (_broadcastHub == null || !IsRunning) return false;
+            try
+            {
+                await _broadcastHub.BroadcastTransactionAsync(tx).ConfigureAwait(false);
+                return true;
+            }
+            catch { return false; }
+        }
+
+        // ── Sync loop ─────────────────────────────────────────────────────────
+
+        private void SyncLoop(CancellationToken token)
+        {
+            WriteLog("Sync loop started");
+            while (!token.IsCancellationRequested)
             {
                 try
                 {
-                    var rpc = new CoinRPC(new Uri(Config.RpcUrl),
-                        new NetworkCredential(RpcUser, RpcPassword));
-                    var info = rpc.GetBlockchainInfo();
-                    SyncedBlocks = info.blocks;
-                    ChainHeaders = info.headers;
+                    // ── Step 1: wait for at least one peer ──────────────────
+                    Node peer = WaitForPeer(30, token);
+                    if (peer == null || token.IsCancellationRequested) continue;
+
+                    // ── Step 2: synchronise block headers ───────────────────
+                    int peerCount = _group?.ConnectedNodes?.Count ?? 0;
+                    UpdateStatus(
+                        $"Syncing headers… ({peerCount} peer{(peerCount == 1 ? "" : "s")})",
+                        SyncedBlocks, _slimChain.Height);
+
                     try
                     {
-                        ChainTxCount = Math.Max(0L, rpc.GetChainTxStats().txcount);
+                        peer.SynchronizeSlimChain(_slimChain, null, token);
                     }
-                    catch
+                    catch (OperationCanceledException) { break; }
+                    catch (Exception ex) when (!token.IsCancellationRequested)
                     {
-                        ChainTxCount = 0;
+                        WriteLog("Header sync error: " + ex.Message);
+                        Thread.Sleep(5000);
+                        continue;
                     }
-                    SyncPercent = ChainHeaders > 0
-                        ? Math.Min(100.0, info.verificationprogress * 100.0)
-                        : 0;
-                    StatusText = SyncPercent >= 99.99
-                        ? "Ready"
-                        : info.initialblockdownload
-                            ? $"Syncing… {SyncPercent:F1}%"
-                            : $"Syncing {SyncedBlocks}/{ChainHeaders}";
-                    StatusChanged?.Invoke(this, EventArgs.Empty);
+
+                    int headerHeight = _slimChain.Height;
+                    ChainHeaders = headerHeight;
+                    PersistHeaders();
+                    WriteLog($"Headers synced to {headerHeight}");
+
+                    // ── Step 3: download full blocks and index them ──────────
+                    int startHeight = _addressIndex.ScannedHeight;
+                    if (startHeight < headerHeight)
+                    {
+                        WriteLog($"Downloading blocks {startHeight + 1}–{headerHeight}");
+                        peer = WaitForPeer(10, token);
+                        if (peer != null)
+                            DownloadBlocks(peer, startHeight, headerHeight, token);
+                    }
+
+                    if (!token.IsCancellationRequested)
+                    {
+                        int h = _addressIndex.ScannedHeight;
+                        UpdateStatus($"Ready — {h} block{(h == 1 ? "" : "s")}", h, headerHeight);
+                        // Wait one minute then check for new blocks
+                        token.WaitHandle.WaitOne(TimeSpan.FromMinutes(1));
+                    }
                 }
-                catch
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
                 {
-                    if (IsRunning && StatusText != "Waiting…")
+                    WriteLog("SyncLoop error: " + ex.Message);
+                    if (!token.IsCancellationRequested)
                     {
-                        StatusText = "Waiting…";
-                        StatusChanged?.Invoke(this, EventArgs.Empty);
+                        UpdateStatus("Reconnecting…", SyncedBlocks, ChainHeaders);
+                        Thread.Sleep(15_000);
                     }
                 }
-            });
+            }
+
+            PersistState();
+            WriteLog("Sync loop stopped");
         }
 
-        // ── Helpers ────────────────────────────────────────────────────────
-
-        private string BuildArgs(string dataDir, bool reindex, bool rescan)
+        private Node WaitForPeer(int maxWaitSeconds, CancellationToken token)
         {
-            var sb = new System.Text.StringBuilder();
-            sb.Append($"-txindex=1 -addrindex=1 -datadir=\"{dataDir}\"");
-            sb.Append($" -server -rpcuser={RpcUser} -rpcpassword={RpcPassword}");
-            sb.Append($" -rpcport={Config.RpcPort}");
-            if (!string.IsNullOrEmpty(Config.ExtraArgs))
-                sb.Append(" " + Config.ExtraArgs);
-            if (reindex) sb.Append(" -reindex");
-            if (rescan) sb.Append(" -rescan");
-            return sb.ToString();
+            for (int i = 0; i < maxWaitSeconds * 2 && !token.IsCancellationRequested; i++)
+            {
+                Node node = _group?.ConnectedNodes?.FirstOrDefault();
+                if (node != null) return node;
+                UpdateStatus(
+                    $"Connecting… ({_group?.ConnectedNodes?.Count ?? 0} peers)",
+                    SyncedBlocks, ChainHeaders);
+                Thread.Sleep(500);
+            }
+            return null;
         }
 
-        private string ResolveExecutablePath(string baseDir)
+        private void DownloadBlocks(
+            Node peer, int fromHeight, int toHeight, CancellationToken token)
         {
-            string candidatePath = Path.Combine(baseDir, Config.DaemonExeName);
-            return File.Exists(candidatePath) ? candidatePath : null;
+            const int BatchSize = 500;
+            int h = fromHeight + 1;
+
+            while (h <= toHeight && !token.IsCancellationRequested)
+            {
+                var batchHashes  = new List<uint256>(BatchSize);
+                var batchHeights = new List<int>(BatchSize);
+
+                for (int i = 0; i < BatchSize && h <= toHeight; i++, h++)
+                {
+                    SlimChainedBlock sb = _slimChain.GetBlock(h);
+                    if (sb == null) continue;
+                    batchHashes.Add(sb.Hash);
+                    batchHeights.Add(sb.Height);
+                }
+
+                if (batchHashes.Count == 0) break;
+
+                try
+                {
+                    int idx = 0;
+                    foreach (Block block in peer.GetBlocks(batchHashes, token))
+                    {
+                        if (token.IsCancellationRequested) break;
+
+                        int blockHeight = idx < batchHeights.Count
+                            ? batchHeights[idx]
+                            : (fromHeight + 1 + idx);
+
+                        _addressIndex.IndexBlock(block, blockHeight);
+
+                        SyncedBlocks  = blockHeight;
+                        ChainTxCount += block.Transactions?.Count ?? 0;
+                        idx++;
+
+                        SyncPercent = toHeight > 0
+                            ? Math.Min(100.0, blockHeight * 100.0 / toHeight)
+                            : 0;
+
+                        int peers = _group?.ConnectedNodes?.Count ?? 0;
+                        string syncText = SyncPercent >= 99.99
+                            ? $"Ready — {blockHeight} blocks"
+                            : $"Blocks {blockHeight}/{toHeight} ({SyncPercent:F1}%) — " +
+                              $"{peers} peer{(peers == 1 ? "" : "s")}";
+                        UpdateStatus(syncText, blockHeight, toHeight);
+
+                        if (idx % 100 == 0)
+                        {
+                            PersistHeaders();
+                            _addressIndex.FlushToDisk();
+                            WriteLog($"Progress: {blockHeight}/{toHeight} ({SyncPercent:F1}%)");
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex) when (!token.IsCancellationRequested)
+                {
+                    WriteLog($"Block batch error near height {h}: " + ex.Message);
+                    Thread.Sleep(5000);
+                    peer = WaitForPeer(10, token);
+                    if (peer == null) break;
+                }
+            }
+
+            if (!token.IsCancellationRequested)
+            {
+                _addressIndex.FlushToDisk();
+                PersistHeaders();
+            }
         }
 
-        private string BuildExecutableNotFoundMessage(string baseDir)
+        // ── Persistence ───────────────────────────────────────────────────────
+
+        private void PersistHeaders()
         {
-            return "Node executable not found: "
-                + Config.DaemonExeName
-                + " in "
-                + baseDir
-                + ". Please add the daemon executable to that folder.";
+            if (_slimChain == null) return;
+            try
+            {
+                string tmp = HeadersFile + ".tmp";
+                using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write))
+                    _slimChain.Save(fs);
+                if (File.Exists(HeadersFile)) File.Delete(HeadersFile);
+                File.Move(tmp, HeadersFile);
+            }
+            catch { }
         }
+
+        private void PersistState()
+        {
+            PersistHeaders();
+            try { _addressManager?.SavePeerFile(PeersFile, Config.Network); } catch { }
+            try { _addressIndex.FlushToDisk(); } catch { }
+        }
+
+        // ── Helpers ───────────────────────────────────────────────────────────
+
+        private void UpdateStatus(string text, int synced, int headers)
+        {
+            bool changed = StatusText != text
+                        || SyncedBlocks != synced
+                        || ChainHeaders != headers;
+            StatusText   = text;
+            SyncedBlocks = synced;
+            if (headers > ChainHeaders) ChainHeaders = headers;
+            if (changed) StatusChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void WriteLog(string message)
+        {
+            try
+            {
+                File.AppendAllText(
+                    Path.Combine(_dataDir, "sync.log"),
+                    $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] {message}\r\n");
+            }
+            catch { }
+        }
+
+        // ── Dispose ───────────────────────────────────────────────────────────
 
         public void Dispose()
         {
@@ -208,7 +457,6 @@ namespace SUP.Wallet
             {
                 _disposed = true;
                 try { Stop(); } catch { }
-                _process?.Dispose();
             }
         }
     }
