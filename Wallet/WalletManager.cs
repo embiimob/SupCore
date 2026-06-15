@@ -243,7 +243,7 @@ namespace SUP.Wallet
             // The Sup!? state engine encodes semantic meaning into the position of outputs in a
             // sendmany transaction — shuffling would break state-machine decoding.
             var builder = _config.Network.CreateTransactionBuilder();
-            builder.ShuffleRandom = false;
+            builder.ShuffleRandom = null;
 
             foreach (var coin in unspent)
                 builder.AddCoins(coin);
