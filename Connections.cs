@@ -65,6 +65,8 @@ namespace SUP
 
             // txindex and addrindex/addressindex are required so that
             // searchrawtransactions can query all transactions at any address.
+            // Both flags are passed for cross-daemon compatibility: older Insight/Bitcore
+            // forks of Bitcoin Core use -addrindex, while newer builds use -addressindex.
             string args = $"-testnet -txindex=1 -addrindex=1 -addressindex=1 -datadir={bitcoinDirectory}";
             if (chkRpcBTCT.Checked)
                 args += " -server -rpcuser=good-user -rpcpassword=better-password -rpcport=18332";
@@ -424,19 +426,19 @@ namespace SUP
                 this.BeginInvoke(new Action(() =>
                 {
                     if (state.TryGetValue("BTCT", out bool btct) && btct && btnTMP.Text != "active")
-                        btnMainConnection_Click(null!, EventArgs.Empty);
+                        btnMainConnection_Click(btnTMP, EventArgs.Empty);
 
                     if (state.TryGetValue("BTC", out bool btc) && btc && btnBTC.Text != "active")
-                        btnBTC_Click(null!, EventArgs.Empty);
+                        btnBTC_Click(btnBTC, EventArgs.Empty);
 
                     if (state.TryGetValue("MZC", out bool mzc) && mzc && btnMZC.Text != "active")
-                        btnMZC_Click(null!, EventArgs.Empty);
+                        btnMZC_Click(btnMZC, EventArgs.Empty);
 
                     if (state.TryGetValue("LTC", out bool ltc) && ltc && btnLTC.Text != "active")
-                        btnLTC_Click(null!, EventArgs.Empty);
+                        btnLTC_Click(btnLTC, EventArgs.Empty);
 
                     if (state.TryGetValue("DOG", out bool dog) && dog && btnDOG.Text != "active")
-                        btnDOGE_Click(null!, EventArgs.Empty);
+                        btnDOGE_Click(btnDOG, EventArgs.Empty);
                 }));
             });
         }
