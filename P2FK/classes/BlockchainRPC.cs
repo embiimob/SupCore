@@ -19,7 +19,7 @@ namespace SUP.RPCClient
 			credentials = _Credentials;
 		}
 
-		protected string HttpCall(string jsonRequest)
+		public string HttpCall(string jsonRequest)
 		{
 			HttpWebRequest request = (HttpWebRequest)WebRequest.Create(uri);
 
